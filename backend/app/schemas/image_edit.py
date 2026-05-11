@@ -51,6 +51,8 @@ class CheckStatus(str, Enum):
     skipped = "skipped"
 
 
+# Layer 1
+
 class SourceImage(BaseModel):
     id: str
     role: str
@@ -69,3 +71,88 @@ class ImageEditSpec(BaseModel):
     realism_level: RealismLevel = RealismLevel.high
     room_type: str | None = None
     decor_style: str | None = None
+
+
+# Layer 2
+
+class EditStep(BaseModel):
+    step: int
+    name: str
+    instruction: str
+
+
+class EditPlan(BaseModel):
+    layout_policy: str
+    style_policy: str
+    material_policy: str
+    lighting_policy: str
+    composition_policy: str
+    steps: list[EditStep]
+
+
+# Layer 3
+
+class CompiledPrompts(BaseModel):
+    positive_prompt: str
+    negative_prompt: str
+    compiler_version: str = "image_prompt_compiler_v1"
+
+
+# Layer 4
+
+class ResultAsset(BaseModel):
+    url: str
+    width: int | None = None
+    height: int | None = None
+
+
+class GenerationResult(BaseModel):
+    assets: list[ResultAsset]
+    raw_response: dict[str, Any] | None = None
+
+
+# Layer 5
+
+class QualityCheckItem(BaseModel):
+    name: str
+    status: CheckStatus
+    message: str
+
+
+class QualityReport(BaseModel):
+    passed: bool
+    checks: list[QualityCheckItem]
+
+
+HOME_DECOR_CHECK_NAMES: tuple[str, ...] = (
+    "structure_preserved",
+    "style_applied",
+    "material_realism",
+    "lighting_consistency",
+    "furniture_geometry",
+    "home_decor_expressiveness",
+    "xhs_cover_readiness",
+)
+
+
+# Top-level
+
+class Provenance(BaseModel):
+    model_config_id: int | None = None
+    model_name: str | None = None
+    created_at: datetime
+    knowledge_base: str | None = None
+    prompt_compiler: str = "image_prompt_compiler_v1"
+
+
+class ImageGenerationArtifact(BaseModel):
+    request_id: str
+    status: ArtifactStatus
+    source_images: list[SourceImage]
+    normalized_spec: ImageEditSpec | None = None
+    edit_plan: EditPlan | None = None
+    compiled_prompts: CompiledPrompts | None = None
+    result_assets: list[ResultAsset] = Field(default_factory=list)
+    quality_report: QualityReport | None = None
+    provenance: Provenance
+    errors: list[str] = Field(default_factory=list)

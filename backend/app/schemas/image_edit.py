@@ -49,3 +49,23 @@ class CheckStatus(str, Enum):
     warning = "warning"
     fail    = "fail"
     skipped = "skipped"
+
+
+class SourceImage(BaseModel):
+    id: str
+    role: str
+    url: str
+
+
+class ImageEditSpec(BaseModel):
+    source_images: list[SourceImage]
+    task_type: TaskType
+    domain: Domain = Domain.general
+    edit_intent: str = Field(min_length=1, max_length=500)
+    preserve: list[str] = Field(default_factory=list)
+    change: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+    output_goal: OutputGoal = OutputGoal.general
+    realism_level: RealismLevel = RealismLevel.high
+    room_type: str | None = None
+    decor_style: str | None = None

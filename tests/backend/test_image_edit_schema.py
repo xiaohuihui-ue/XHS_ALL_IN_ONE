@@ -6,6 +6,8 @@ from backend.app.schemas.image_edit import (
     RealismLevel,
     ArtifactStatus,
     CheckStatus,
+    SourceImage,
+    ImageEditSpec,
 )
 
 
@@ -51,3 +53,65 @@ def test_check_status_values():
     assert CheckStatus.warning == "warning"
     assert CheckStatus.fail == "fail"
     assert CheckStatus.skipped == "skipped"
+
+
+# --- Layer 1: SourceImage, ImageEditSpec ---
+
+def test_source_image_required_fields():
+    img = SourceImage(id="img1", role="reference_room", url="https://example.com/a.jpg")
+    assert img.id == "img1"
+    assert img.role == "reference_room"
+    assert img.url == "https://example.com/a.jpg"
+
+
+def test_image_edit_spec_defaults():
+    spec = ImageEditSpec(
+        source_images=[SourceImage(id="i1", role="ref", url="https://x.com/a.jpg")],
+        task_type=TaskType.style_transfer,
+        edit_intent="Apply Japandi style",
+    )
+    assert spec.domain == Domain.general
+    assert spec.preserve == []
+    assert spec.change == []
+    assert spec.avoid == []
+    assert spec.output_goal == OutputGoal.general
+    assert spec.realism_level == RealismLevel.high
+    assert spec.room_type is None
+    assert spec.decor_style is None
+
+
+def test_image_edit_spec_full():
+    spec = ImageEditSpec(
+        source_images=[SourceImage(id="i1", role="ref", url="https://x.com/a.jpg")],
+        task_type=TaskType.room_makeover,
+        domain=Domain.home_decor,
+        edit_intent="Transform to modern minimalist",
+        preserve=["window position", "ceiling height"],
+        change=["furniture", "wall color"],
+        avoid=["clutter", "dark tones"],
+        output_goal=OutputGoal.xhs_cover,
+        realism_level=RealismLevel.high,
+        room_type="living_room",
+        decor_style="modern_minimalist",
+    )
+    assert spec.domain == Domain.home_decor
+    assert len(spec.preserve) == 2
+    assert spec.room_type == "living_room"
+
+
+def test_image_edit_spec_edit_intent_min_length():
+    with pytest.raises(Exception):
+        ImageEditSpec(
+            source_images=[SourceImage(id="i1", role="ref", url="https://x.com/a.jpg")],
+            task_type=TaskType.variation,
+            edit_intent="",
+        )
+
+
+def test_image_edit_spec_edit_intent_max_length():
+    with pytest.raises(Exception):
+        ImageEditSpec(
+            source_images=[SourceImage(id="i1", role="ref", url="https://x.com/a.jpg")],
+            task_type=TaskType.variation,
+            edit_intent="x" * 501,
+        )

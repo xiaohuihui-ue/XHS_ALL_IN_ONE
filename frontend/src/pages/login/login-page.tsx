@@ -81,7 +81,7 @@ export function LoginPage() {
       const from = (
         location.state as { from?: { pathname?: string } } | null
       )?.from?.pathname;
-      navigate(from || "/platform-select", { replace: true });
+      navigate(from || "/platforms/xhs/dashboard", { replace: true });
     } catch (caughtError) {
       setError(
         errorMessage(

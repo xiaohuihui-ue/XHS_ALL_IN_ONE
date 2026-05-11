@@ -16,7 +16,6 @@ import {
   ScheduleOutlined,
   SearchOutlined,
   SendOutlined,
-  SettingOutlined,
   ThunderboltOutlined,
   StarOutlined,
   SunOutlined,
@@ -70,7 +69,6 @@ const mainNavItems: MenuProps["items"] = [
 const footerNavItems: MenuProps["items"] = [
   { key: "/tasks", icon: <ScheduleOutlined />, label: "任务中心" },
   { key: "/models", icon: <RobotOutlined />, label: "模型配置" },
-  { key: "/settings", icon: <SettingOutlined />, label: "设置" },
 ];
 
 function levelColor(level: string): string {

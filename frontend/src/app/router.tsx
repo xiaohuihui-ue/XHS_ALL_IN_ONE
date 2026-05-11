@@ -6,7 +6,6 @@ import { ProtectedRoute, PublicOnlyRoute } from "../components/ui/protected-rout
 import { LoginPage } from "../pages/login/login-page";
 import { ModelConfigPage } from "../pages/models/model-config-page";
 import { PlatformSelectPage } from "../pages/platform-select/platform-select-page";
-import { SettingsPage } from "../pages/settings/settings-page";
 import { TaskCenterPage } from "../pages/tasks/task-center-page";
 import { AutoOpsPage } from "../pages/platforms/xhs/auto-ops-page";
 import { XhsAccountsPage } from "../pages/platforms/xhs/accounts-page";
@@ -28,7 +27,7 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/platform-select" replace />} />
+        <Route path="/" element={<Navigate to="/platforms/xhs/dashboard" replace />} />
         <Route
           path="/login"
           element={
@@ -76,7 +75,6 @@ export function AppRouter() {
           <Route path="/platforms/xhs/:section" element={<XhsSectionPage />} />
           <Route path="/tasks" element={<TaskCenterPage />} />
           <Route path="/models" element={<ModelConfigPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

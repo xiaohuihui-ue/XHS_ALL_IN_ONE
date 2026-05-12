@@ -150,3 +150,213 @@ def test_serialize_draft_includes_tags():
     result = _serialize_draft(draft)
     assert "tags" in result
     assert result["tags"] == [{"name": "低卡早餐"}]
+
+
+# ---------------------------------------------------------------------------
+# Integration tests for POST /api/ai/agent-drafts/chat/completions
+# ---------------------------------------------------------------------------
+
+import time
+from unittest.mock import MagicMock
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from backend.app.main import app
+from backend.app.core.database import get_db, Base
+from backend.app.core.deps import get_current_user
+from backend.app.core.security import encrypt_text
+from backend.app.models import User, ModelConfig
+from backend.app.api.ai import get_text_ai_client, get_image_ai_client
+
+
+def _make_test_db(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path}/test.db", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine)
+    return engine, SessionLocal
+
+
+def _seed_user_and_models(session, with_image_model=True):
+    user = User(username="tester", password_hash="x")
+    session.add(user)
+    session.flush()
+
+    text_model = ModelConfig(
+        user_id=user.id,
+        name="test-text",
+        model_type="text",
+        provider="openai",
+        model_name="gpt-test",
+        base_url="http://fake-llm",
+        encrypted_api_key=encrypt_text("sk-test"),
+        is_default=True,
+    )
+    session.add(text_model)
+
+    if with_image_model:
+        image_model = ModelConfig(
+            user_id=user.id,
+            name="test-image",
+            model_type="image",
+            provider="openai",
+            model_name="dall-e-test",
+            base_url="http://fake-image-llm",
+            encrypted_api_key=encrypt_text("sk-img-test"),
+            is_default=True,
+        )
+        session.add(image_model)
+
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def _override_app(tmp_path, *, with_image_model=True, text_client, image_client=None):
+    engine, SessionLocal = _make_test_db(tmp_path)
+    db = SessionLocal()
+    user = _seed_user_and_models(db, with_image_model=with_image_model)
+    db.close()
+
+    def override_db():
+        s = SessionLocal()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    def override_user():
+        return user
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_user
+    app.dependency_overrides[get_text_ai_client] = lambda: text_client
+    if image_client is not None:
+        app.dependency_overrides[get_image_ai_client] = lambda: image_client
+    return engine, SessionLocal
+
+
+def _cleanup(engine, SessionLocal):
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_text_ai_client, None)
+    app.dependency_overrides.pop(get_image_ai_client, None)
+    SessionLocal.close_all()
+    engine.dispose()
+
+
+_VALID_REQUEST = {
+    "messages": [{"role": "user", "content": "Generate 1 low-calorie breakfast draft."}],
+    "n": 1,
+    "metadata": {"platform": "xhs"},
+    "image_options": {"n": 0},
+}
+
+_TEXT_CLIENT_RESPONSE = {
+    "drafts": [
+        {
+            "title": "低卡早餐推荐",
+            "body": "这款早餐热量低，口感好。",
+            "tags": ["低卡早餐", "健康饮食"],
+            "image_prompt": {
+                "positive_prompt": "healthy breakfast",
+                "negative_prompt": "junk food",
+                "reference_strategy": "no_reference",
+            },
+        }
+    ]
+}
+
+
+def test_agent_drafts_requires_auth():
+    client = TestClient(app)
+    response = client.post("/api/ai/agent-drafts/chat/completions", json=_VALID_REQUEST)
+    assert response.status_code == 401
+
+
+def test_agent_drafts_missing_text_model(tmp_path):
+    engine, SessionLocal = _make_test_db(tmp_path)
+    db = SessionLocal()
+    user = User(username="u2", password_hash="x")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    db.close()
+
+    def override_db():
+        s = SessionLocal()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json=_VALID_REQUEST)
+        assert response.status_code == 400
+        assert "text model" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
+        SessionLocal.close_all()
+        engine.dispose()
+
+
+def test_agent_drafts_creates_drafts_with_tags(tmp_path):
+    text_client = MagicMock()
+    text_client.generate_agent_drafts.return_value = _TEXT_CLIENT_RESPONSE
+    engine, SessionLocal = _override_app(tmp_path, with_image_model=False, text_client=text_client)
+    try:
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json=_VALID_REQUEST)
+        assert response.status_code == 200
+        body = response.json()
+        content = __import__("json").loads(body["choices"][0]["message"]["content"])
+        assert content["created_count"] == 1
+        assert content["failed_count"] == 0
+        draft_tags = content["items"][0]["draft"]["tags"]
+        assert draft_tags == [{"name": "低卡早餐"}, {"name": "健康饮食"}]
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
+def test_agent_drafts_image_failure_keeps_draft(tmp_path):
+    text_client = MagicMock()
+    text_client.generate_agent_drafts.return_value = _TEXT_CLIENT_RESPONSE
+
+    image_client = MagicMock()
+    image_client.generate_image.side_effect = Exception("upstream timeout")
+
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=True, text_client=text_client, image_client=image_client
+    )
+    try:
+        request = {**_VALID_REQUEST, "image_options": {"n": 1}}
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json=request)
+        assert response.status_code == 200
+        body = response.json()
+        content = __import__("json").loads(body["choices"][0]["message"]["content"])
+        assert content["created_count"] == 1
+        item = content["items"][0]
+        assert item["status"] == "partial"
+        assert len(item["errors"]) > 0
+        assert item["draft"]["id"] is not None
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
+def test_agent_drafts_missing_image_model_when_images_requested(tmp_path):
+    text_client = MagicMock()
+    text_client.generate_agent_drafts.return_value = _TEXT_CLIENT_RESPONSE
+
+    engine, SessionLocal = _override_app(tmp_path, with_image_model=False, text_client=text_client)
+    try:
+        request = {**_VALID_REQUEST, "image_options": {"n": 1}}
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json=request)
+        assert response.status_code == 400
+        assert "image model" in response.json()["detail"].lower()
+    finally:
+        _cleanup(engine, SessionLocal)

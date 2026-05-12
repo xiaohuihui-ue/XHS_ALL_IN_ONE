@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import time
 from collections.abc import Callable
 from typing import Any, Literal, Optional
 
@@ -513,6 +515,199 @@ def generate_image(
     else:
         db.commit()
     return response_data
+
+
+def _extract_message_parts(messages: list[_AgentMessage]) -> tuple[list[dict], list[str]]:
+    plain: list[dict] = []
+    ref_urls: list[str] = []
+    for msg in messages:
+        if isinstance(msg.content, str):
+            plain.append({"role": msg.role, "content": msg.content})
+        else:
+            parts: list[dict] = []
+            for part in msg.content:
+                if part.type == "text":
+                    parts.append({"type": "text", "text": part.text or ""})
+                elif part.type == "image_url" and part.image_url:
+                    parts.append({"type": "image_url", "image_url": {"url": part.image_url.url}})
+                    ref_urls.append(part.image_url.url)
+            plain.append({"role": msg.role, "content": parts})
+    return plain, ref_urls
+
+
+@router.post("/agent-drafts/chat/completions")
+def agent_drafts_chat_completions(
+    payload: AgentDraftsChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    text_ai_client: TextAiClient = Depends(get_text_ai_client),
+    image_ai_client: ImageAiClient = Depends(get_image_ai_client),
+):
+    text_model_config, text_api_key = _text_model_context(db, current_user)
+
+    images_per_draft = payload.image_options.n
+    image_model_config = None
+    image_api_key = ""
+    if images_per_draft > 0:
+        image_model_config, image_api_key = _image_model_context(db, current_user)
+
+    plain_messages, ref_urls = _extract_message_parts(payload.messages)
+    output_requirements = payload.metadata.output_requirements if payload.metadata else None
+
+    task = Task(
+        user_id=current_user.id,
+        platform="xhs",
+        task_type="ai_agent_drafts_generate",
+        status="running",
+        progress=10,
+        payload={
+            "n": payload.n,
+            "images_per_draft": images_per_draft,
+            "reference_image_count": len(ref_urls),
+            "items": [],
+        },
+    )
+    db.add(task)
+    db.flush()
+
+    try:
+        structured = text_ai_client.generate_agent_drafts(
+            model_config=text_model_config,
+            api_key=text_api_key,
+            messages=plain_messages,
+            n=payload.n,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            output_requirements=output_requirements,
+            reference_image_urls=ref_urls,
+        )
+    except ValueError as exc:
+        task.status = "failed"
+        task.progress = 100
+        task.payload = {**(task.payload or {}), "error": str(exc)}
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        task.status = "failed"
+        task.progress = 100
+        task.payload = {**(task.payload or {}), "error": str(exc)}
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI text generation failed: {exc}") from exc
+
+    result_items: list[dict] = []
+    task_items: list[dict] = []
+    created_count = 0
+    failed_count = 0
+
+    for idx, draft_data in enumerate(structured.get("drafts", [])):
+        raw_tags: list[str] = draft_data.get("tags") or []
+        stored_tags = [{"name": t} for t in raw_tags]
+        image_prompt_data: dict = draft_data.get("image_prompt") or {}
+
+        draft = AiDraft(
+            user_id=current_user.id,
+            platform="xhs",
+            title=draft_data.get("title") or "",
+            body=draft_data.get("body") or "",
+            tags=stored_tags,
+        )
+        db.add(draft)
+        db.flush()
+        created_count += 1
+
+        item_assets: list[dict] = []
+        item_errors: list[str] = []
+        asset_ids: list[int] = []
+
+        if images_per_draft > 0 and image_model_config is not None:
+            positive_prompt = image_prompt_data.get("positive_prompt") or draft_data.get("title") or ""
+            for img_idx in range(images_per_draft):
+                try:
+                    img_result = image_ai_client.generate_image(
+                        model_config=image_model_config,
+                        api_key=image_api_key,
+                        prompt=positive_prompt,
+                        reference_images=ref_urls if ref_urls else None,
+                    )
+                    image_url = img_result.get("url") or ""
+                    gen_asset = AiGeneratedAsset(
+                        user_id=current_user.id,
+                        draft_id=draft.id,
+                        prompt=positive_prompt,
+                        model_name=image_model_config.model_name,
+                        params={"size": payload.image_options.size, "style": payload.image_options.style},
+                        file_path="",
+                    )
+                    db.add(gen_asset)
+                    db.flush()
+                    draft_asset = DraftAsset(
+                        draft_id=draft.id,
+                        asset_type="image",
+                        url=image_url,
+                        local_path="",
+                        sort_order=img_idx,
+                    )
+                    db.add(draft_asset)
+                    db.flush()
+                    asset_ids.append(draft_asset.id)
+                    item_assets.append({
+                        "id": draft_asset.id,
+                        "draft_id": draft.id,
+                        "asset_type": "image",
+                        "url": image_url,
+                        "local_path": "",
+                        "sort_order": img_idx,
+                    })
+                except Exception as exc:
+                    item_errors.append(f"Image generation failed: {exc}")
+
+        item_status = "completed" if not item_errors else "partial"
+        result_items.append({
+            "draft": _serialize_draft(draft),
+            "image_prompt": image_prompt_data,
+            "assets": item_assets,
+            "status": item_status,
+            "errors": item_errors,
+        })
+        task_items.append({
+            "index": idx,
+            "draft_id": draft.id,
+            "status": item_status,
+        })
+
+    task.status = "completed"
+    task.progress = 100
+    task.payload = {
+        **(task.payload or {}),
+        "items": task_items,
+        "created_count": created_count,
+        "failed_count": failed_count,
+    }
+    db.commit()
+
+    batch_result = {
+        "items": result_items,
+        "created_count": created_count,
+        "failed_count": failed_count,
+    }
+
+    return {
+        "id": f"chatcmpl_xhs_agent_drafts_{task.id}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": payload.model or "default",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps(batch_result, ensure_ascii=False),
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None},
+    }
 
 
 @router.post("/images/describe")

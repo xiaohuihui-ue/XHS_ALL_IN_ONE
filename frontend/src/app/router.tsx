@@ -22,6 +22,7 @@ import { XhsImageStudioPage } from "../pages/platforms/xhs/image-studio-page";
 import { XhsPublishPage } from "../pages/platforms/xhs/publish-page";
 import { XhsVideoStudioPage } from "../pages/platforms/xhs/video-studio-page";
 import { XhsSectionPage } from "../pages/platforms/xhs/xhs-section-page";
+import { XhsAgentDraftsPage } from "../pages/platforms/xhs/agent-drafts-page";
 
 export function AppRouter() {
   return (
@@ -72,6 +73,7 @@ export function AppRouter() {
           <Route path="/platforms/xhs/video-studio" element={<XhsVideoStudioPage />} />
           <Route path="/platforms/xhs/publish" element={<XhsPublishPage />} />
           <Route path="/platforms/xhs/auto-ops" element={<AutoOpsPage />} />
+          <Route path="/platforms/xhs/agent-drafts" element={<XhsAgentDraftsPage />} />
           <Route path="/platforms/xhs/:section" element={<XhsSectionPage />} />
           <Route path="/tasks" element={<TaskCenterPage />} />
           <Route path="/models" element={<ModelConfigPage />} />

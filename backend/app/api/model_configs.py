@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_user
-from backend.app.core.security import encrypt_text
+from backend.app.core.security import decrypt_text, encrypt_text
 from backend.app.models import DEFAULT_TEXT_MODEL_NAME, ModelConfig, User
 from backend.app.schemas.common import paginated
 
@@ -35,6 +35,11 @@ class ModelConfigUpdateRequest(BaseModel):
     is_default: Optional[bool] = None
 
 
+class ModelConfigImportRequest(BaseModel):
+    version: int = Field(default=1, ge=1, le=1)
+    configs: list[ModelConfigCreateRequest] = Field(min_length=1, max_length=100)
+
+
 def _serialize_config(config: ModelConfig) -> dict:
     return {
         "id": config.id,
@@ -44,6 +49,18 @@ def _serialize_config(config: ModelConfig) -> dict:
         "model_name": config.model_name,
         "base_url": config.base_url,
         "has_api_key": bool(config.encrypted_api_key),
+        "is_default": config.is_default,
+    }
+
+
+def _serialize_export_config(config: ModelConfig) -> dict:
+    return {
+        "name": config.name,
+        "model_type": config.model_type,
+        "provider": config.provider,
+        "model_name": config.model_name,
+        "base_url": config.base_url,
+        "api_key": decrypt_text(config.encrypted_api_key) if config.encrypted_api_key else "",
         "is_default": config.is_default,
     }
 
@@ -89,6 +106,85 @@ def get_model_configs(
     return paginated([_serialize_config(config) for config in configs], page, page_size)
 
 
+@router.get("/export")
+def export_model_configs(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    configs = db.scalars(
+        select(ModelConfig)
+        .where(ModelConfig.user_id == current_user.id)
+        .order_by(ModelConfig.model_type.asc(), ModelConfig.id.asc())
+    ).all()
+    return {
+        "version": 1,
+        "configs": [_serialize_export_config(config) for config in configs],
+    }
+
+
+@router.post("/import")
+def import_model_configs(
+    payload: ModelConfigImportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    created_count = 0
+    updated_count = 0
+    imported_configs: list[ModelConfig] = []
+
+    for item in payload.configs:
+        name = item.name.strip()
+        provider = item.provider.strip()
+        model_name = _normalize_model_name(item.model_type, item.model_name)
+        base_url = item.base_url.strip()
+        api_key = item.api_key.strip()
+
+        config = db.scalar(
+            select(ModelConfig)
+            .where(
+                ModelConfig.user_id == current_user.id,
+                ModelConfig.model_type == item.model_type,
+                ModelConfig.name == name,
+            )
+            .order_by(ModelConfig.id.asc())
+        )
+        if item.is_default:
+            _clear_default_for_type(db, current_user.id, item.model_type)
+
+        if config is None:
+            config = ModelConfig(
+                user_id=current_user.id,
+                name=name,
+                model_type=item.model_type,
+                provider=provider,
+                model_name=model_name,
+                base_url=base_url,
+                encrypted_api_key=encrypt_text(api_key) if api_key else "",
+                is_default=item.is_default,
+            )
+            db.add(config)
+            created_count += 1
+        else:
+            config.provider = provider
+            config.model_name = model_name
+            config.base_url = base_url
+            config.encrypted_api_key = encrypt_text(api_key) if api_key else ""
+            config.is_default = item.is_default
+            updated_count += 1
+        imported_configs.append(config)
+
+    db.commit()
+    for config in imported_configs:
+        db.refresh(config)
+
+    return {
+        "imported_count": len(imported_configs),
+        "created_count": created_count,
+        "updated_count": updated_count,
+        "items": [_serialize_config(config) for config in imported_configs],
+    }
+
+
 @router.post("")
 def create_model_config(
     payload: ModelConfigCreateRequest,
@@ -120,8 +216,6 @@ def test_model_config(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from backend.app.core.security import decrypt_text
-
     config = _get_owned_config(db, current_user, config_id)
     if not config.encrypted_api_key:
         return {"id": config.id, "status": "error", "message": "未配置 API Key"}
@@ -139,14 +233,14 @@ def test_model_config(
                 f"{base_url}/images/generations",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={"model": config.model_name, "prompt": "test", "n": 1, "size": "256x256"},
-                timeout=15,
+                timeout=120,
             )
         else:
             resp = http_requests.post(
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={"model": config.model_name, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5},
-                timeout=15,
+                timeout=120,
             )
 
         if resp.status_code < 400:

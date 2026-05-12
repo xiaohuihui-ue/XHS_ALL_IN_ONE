@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XHS_ALL_IN_ONE 项目级测试计划</title>
+  <style>
+    :root {
+      --color-text-primary: #172033;
+      --color-text-secondary: #586274;
+      --color-background-primary: #f7f8fb;
+      --color-background-secondary: #ffffff;
+      --color-border: #dfe4ec;
+      --color-accent: #1668dc;
+      --color-success: #16794c;
+      --color-warning: #9a5b00;
+      --color-danger: #b42318;
+      --color-muted: #eef2f7;
+      --shadow-soft: 0 8px 24px rgba(20, 31, 52, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-text-primary: #e8edf5;
+        --color-text-secondary: #aab5c4;
+        --color-background-primary: #10141c;
+        --color-background-secondary: #171d28;
+        --color-border: #2d3748;
+        --color-accent: #63a6ff;
+        --color-success: #4ade80;
+        --color-warning: #f6bd60;
+        --color-danger: #ff7a70;
+        --color-muted: #202838;
+        --shadow-soft: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--color-text-primary);
+      background: var(--color-background-primary);
+      font: 14px/1.65 "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    header {
+      padding: 28px 32px 22px;
+      background: var(--color-background-secondary);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px 24px 48px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    p { margin: 0 0 10px; }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: var(--color-muted);
+      color: var(--color-text-primary);
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 12px;
+      word-break: break-word;
+    }
+
+    .subtitle {
+      color: var(--color-text-secondary);
+      max-width: 980px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 9px;
+      border: 1px solid var(--color-border);
+      border-radius: 999px;
+      color: var(--color-text-secondary);
+      background: var(--color-background-primary);
+      font-size: 12px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+
+    .section {
+      margin-bottom: 18px;
+      padding: 18px;
+      background: var(--color-background-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-6 { grid-column: span 6; }
+    .span-4 { grid-column: span 4; }
+
+    @media (max-width: 860px) {
+      main { padding: 16px; }
+      header { padding: 22px 18px; }
+      .span-8, .span-6, .span-4 { grid-column: span 12; }
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status.pass { color: var(--color-success); background: rgba(22, 121, 76, 0.12); }
+    .status.fail { color: var(--color-danger); background: rgba(180, 35, 24, 0.12); }
+    .status.warn { color: var(--color-warning); background: rgba(154, 91, 0, 0.13); }
+    .status.todo { color: var(--color-accent); background: rgba(22, 104, 220, 0.12); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    th, td {
+      padding: 10px 9px;
+      border-bottom: 1px solid var(--color-border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    li { margin: 5px 0; }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .step {
+      padding: 12px 13px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-background-primary);
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .note {
+      border-left: 3px solid var(--color-accent);
+      padding: 10px 12px;
+      background: var(--color-background-primary);
+      color: var(--color-text-secondary);
+      border-radius: 0 8px 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>XHS_ALL_IN_ONE 项目级测试计划</h1>
+    <p class="subtitle">基于 <code>docs/</code> 下的开发计划、当前仓库测试入口和本次实际执行结果重新整理。目标是把设计文档里的验收条件转成可执行的分层测试门禁，并覆盖后端、前端、数据、AI 编排和真实浏览器路径。</p>
+    <div class="meta">
+      <span class="pill">生成日期：2026-05-12</span>
+      <span class="pill">仓库：F:\Gitee\XHS_ALL_IN_ONE</span>
+      <span class="pill">Python：3.12.10</span>
+      <span class="pill">Node：24.14.0</span>
+      <span class="pill">npm：11.7.0</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="section">
+      <h2>一、开发计划来源</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>文档</th>
+            <th>计划重点</th>
+            <th>测试落点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>docs/superpowers/plans/2026-05-11-image-edit-schema.md</code></td>
+            <td>新增图生图规范化 Pydantic v2 模型，覆盖输入、编辑计划、prompt 编译、生成结果、质量报告和最终 artifact。</td>
+            <td><code>tests/backend/test_image_edit_schema.py</code> 是核心回归入口；还要确保该 schema 不破坏现有 API 导入。</td>
+          </tr>
+          <tr>
+            <td><code>docs/superpowers/plans/2026-05-12-xhs-agent-drafts.md</code></td>
+            <td>新增 XHS Agent 草稿页、OpenAI 风格 <code>/api/ai/agent-drafts/chat/completions</code> 编排端点、草稿保存和图片资产关联。</td>
+            <td><code>tests/backend/test_agent_drafts.py</code>、前端 build、路由浏览器验证、Agent 草稿提交和草稿工坊可见性验证。</td>
+          </tr>
+          <tr>
+            <td><code>docs/superpowers/specs/2026-05-12-auth-email-password-reset-design.md</code></td>
+            <td>注册增加邮箱，新增忘记密码和重置密码流程，配置 SMTP，用户表 <code>email</code> 非空唯一。</td>
+            <td>认证测试夹具必须更新为传入邮箱；所有直接创建 <code>User</code> 的测试也必须填充 <code>email</code>。</td>
+          </tr>
+          <tr>
+            <td><code>docs/framework-design.html</code></td>
+            <td>项目框架与模块关系说明，适合做项目结构阅读 artifact。</td>
+            <td>作为架构理解来源，不替代可执行测试；需要和真实路由、API、模型表保持同步。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="grid">
+      <section class="section span-8">
+        <h2>二、总体验收门禁</h2>
+        <div class="timeline">
+          <div class="step">
+            <strong>Gate 1：后端基础与数据模型</strong>
+            <p>运行全部后端 pytest，覆盖健康检查、平台注册表、认证、XHS 账号、笔记、草稿、AI、任务、发布、监控、通知、迁移和调度器。</p>
+          </div>
+          <div class="step">
+            <strong>Gate 2：计划新增能力</strong>
+            <p>单独验证 <code>test_image_edit_schema.py</code> 和 <code>test_agent_drafts.py</code>，确保设计计划的模型、端点、失败策略和资产关联全部被覆盖。</p>
+          </div>
+          <div class="step">
+            <strong>Gate 3：前端类型与构建</strong>
+            <p>运行 <code>npm run build</code>，确认 TypeScript、路由导入、页面组件、API 类型和生产打包无错误。</p>
+          </div>
+          <div class="step">
+            <strong>Gate 4：本地服务联调</strong>
+            <p>启动 FastAPI + Vite，检查 <code>/api/health</code>、登录页、注册流程、受保护路由跳转、XHS Agent 草稿页和侧边栏入口。</p>
+          </div>
+          <div class="step">
+            <strong>Gate 5：真实浏览器操作</strong>
+            <p>用浏览器执行注册、登录、页面跳转、表单校验、Agent 草稿表单填写和提交错误态或成功态验证。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section span-4">
+        <h2>三、本次执行快照</h2>
+        <p><span class="status pass">通过</span> 前端 <code>npm run build</code> 成功，Vite 生成 <code>dist/</code>，仅有大 chunk 体积警告。</p>
+        <p><span class="status fail">未通过</span> 后端 <code>python -m pytest tests/backend -v</code>：<code>165</code> 项中 <code>79 passed</code>、<code>86 failed</code>。</p>
+        <p><span class="status warn">根因</span> 邮箱注册改动已经要求 <code>email</code>，但旧测试仍只传 <code>username/password</code>；Agent Drafts 部分测试也直接创建 <code>User(email=None)</code>。</p>
+        <p><span class="status pass">通过</span> 真实浏览器冒烟已在 <code>http://127.0.0.1:8603</code> 执行，通过注册、工作台、Agent 草稿页、找回密码页和重置密码缺 token 错误态。</p>
+        <p><span class="status warn">环境</span> Windows 端口排除表包含 <code>7980-8079</code>，默认后端端口 <code>8000</code> 无法绑定；本次改用 <code>8602</code>。</p>
+      </section>
+    </div>
+
+    <section class="section">
+      <h2>四、命令级测试矩阵</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>层级</th>
+            <th>命令或检查</th>
+            <th>覆盖内容</th>
+            <th>当前状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>P0 后端全量</td>
+            <td><code>python -m pytest tests/backend -v</code></td>
+            <td>API、数据库、认证、XHS 账号、内容库、草稿、AI、发布、调度、通知、计划新增能力。</td>
+            <td><span class="status fail">当前失败</span> 旧认证测试夹具未适配邮箱。</td>
+          </tr>
+          <tr>
+            <td>P0 前端构建</td>
+            <td><code>cd frontend && npm run build</code></td>
+            <td>TypeScript 编译、React 路由、Ant Design 页面、API 类型、生产打包。</td>
+            <td><span class="status pass">本次通过</span> 存在体积警告。</td>
+          </tr>
+          <tr>
+            <td>P0 图生图 schema</td>
+            <td><code>python -m pytest tests/backend/test_image_edit_schema.py -v</code></td>
+            <td>ImageEditSpec、EditPlan、CompiledPrompts、GenerationResult、QualityReport、ImageGenerationArtifact。</td>
+            <td><span class="status pass">全量运行中该文件通过</span></td>
+          </tr>
+          <tr>
+            <td>P0 Agent Drafts</td>
+            <td><code>python -m pytest tests/backend/test_agent_drafts.py -v</code></td>
+            <td>结构化输出两阶段 fallback、标签序列化、认证、默认模型、草稿创建、图片失败部分成功。</td>
+            <td><span class="status warn">部分通过</span> 文本客户端单元测试通过；集成测试受 <code>User.email</code> 夹具影响。</td>
+          </tr>
+          <tr>
+            <td>P1 认证回归</td>
+            <td><code>python -m pytest tests/backend/test_api.py::test_auth_register_login_me_and_refresh_use_real_tokens -v</code></td>
+            <td>注册、登录、<code>/me</code>、refresh token。</td>
+            <td><span class="status fail">当前失败</span> 测试请求缺少 <code>email</code>，返回 422。</td>
+          </tr>
+          <tr>
+            <td>P1 运行时健康</td>
+            <td><code>Invoke-WebRequest http://127.0.0.1:8000/api/health</code></td>
+            <td>FastAPI 进程、路由注册、服务可达性。</td>
+            <td><span class="status pass">本次通过</span> 实际端口为 <code>8603</code>，返回 <code>{"status":"ok","service":"spider-xhs"}</code>。</td>
+          </tr>
+          <tr>
+            <td>P1 浏览器冒烟</td>
+            <td>打开 <code>http://127.0.0.1:5173/login</code> 并操作页面。</td>
+            <td>Vite 代理、登录页渲染、注册登录、受保护路由、XHS Agent 草稿页面。</td>
+            <td><span class="status pass">本次通过</span> 实际使用 FastAPI 托管构建产物：<code>http://127.0.0.1:8603</code>。</td>
+          </tr>
+          <tr>
+            <td>P2 真实 AI 联调</td>
+            <td>配置真实 OpenAI 兼容文本和图片模型后提交 Agent 草稿生成。</td>
+            <td>模型配置、真实生成、草稿持久化、图片资产挂载、草稿工坊可见性。</td>
+            <td><span class="status warn">需要凭据</span> 无 API Key 时只验证错误态。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>五、功能域测试计划</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>功能域</th>
+            <th>重点用例</th>
+            <th>数据与边界</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>认证与用户</td>
+            <td>注册必须包含邮箱；用户名和邮箱重复校验；登录、刷新 token、登出、受保护路由跳转；忘记密码在 SMTP 未配置时给出可理解错误；重置 token 无效和成功路径。</td>
+            <td>每个测试用户使用唯一 username 和 email；测试夹具直接创建 User 时必须设置 email。邮箱域名使用 <code>example.com</code> 或可验证域名，避免 <code>.test</code>、<code>.local</code> 这类会被 <code>EmailStr</code> 拒绝的保留域。</td>
+          </tr>
+          <tr>
+            <td>XHS 账号矩阵</td>
+            <td>PC/Creator 二维码登录、手机号登录、Cookie 导入、账号检查、过期状态、跨用户访问拒绝。</td>
+            <td>使用 fake adapter，不触发真实 XHS 登录；真实扫码只作为人工或专门联调项。</td>
+          </tr>
+          <tr>
+            <td>内容库与标签</td>
+            <td>搜索结果保存、详情素材保存、评论抓取、标签 CRUD、批量打标、JSON/CSV 导出、跨用户隔离。</td>
+            <td>覆盖图文和视频素材；导出文件验证 BOM、字段和权限。</td>
+          </tr>
+          <tr>
+            <td>草稿与发布</td>
+            <td>从笔记创建草稿、草稿更新、资产排序、发送到发布中心、发布参数、立即/定时发布、失败任务、重试和取消。</td>
+            <td>发布适配器必须 fake；不在自动测试中触发真实发布。</td>
+          </tr>
+          <tr>
+            <td>AI 与模型配置</td>
+            <td>模型配置加密、默认模型选择、文本生成、图片生成、图片描述、Agent 草稿结构化输出、两阶段 fallback。</td>
+            <td>单元测试 mock OpenAI 兼容响应；真实模型调用放在凭据可用的本地 smoke 或 staging。</td>
+          </tr>
+          <tr>
+            <td>图生图 schema</td>
+            <td>枚举值、输入边界、编辑计划、prompt 编译结果、生成结果状态、质量报告、最终 artifact 可追溯字段。</td>
+            <td>保持 schema 纯模型层，不要求真实图片生成。</td>
+          </tr>
+          <tr>
+            <td>Agent 草稿页</td>
+            <td>路由 <code>/platforms/xhs/agent-drafts</code>、侧边栏位置、表单校验、提交 loading/error/result、草稿卡片、图片预览、保存后在草稿页可见。</td>
+            <td>无模型配置时验证错误态；有 fake 或真实模型时验证成功态。</td>
+          </tr>
+          <tr>
+            <td>任务、监控与通知</td>
+            <td>任务列表和详情、重试、调度器状态、自动任务、监控刷新、通知创建和标记已读。</td>
+            <td>默认测试关闭 scheduler 后台循环，使用服务函数或显式 API 触发。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>六、真实网页操作脚本</h2>
+      <div class="timeline">
+        <div class="step">
+          <strong>1. 服务启动</strong>
+          <p>启动后端 <code>python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000</code> 和前端 <code>npm run dev -- --host 127.0.0.1 --port 5173</code>，确认 <code>/api/health</code> 返回 <code>status=ok</code>。</p>
+        </div>
+        <div class="step">
+          <strong>2. 登录页</strong>
+          <p>打开 <code>http://127.0.0.1:5173/login</code>，确认页面渲染；切换注册模式，输入 username、email、password，完成注册并进入工作台。</p>
+        </div>
+        <div class="step">
+          <strong>3. Auth 新页面</strong>
+          <p>从登录页进入 <code>/forgot-password</code>，输入邮箱提交；在未配置 SMTP 的默认环境下应显示邮件服务不可用的错误。打开 <code>/reset-password?token=bad</code> 应显示无效 token 相关错误。</p>
+        </div>
+        <div class="step">
+          <strong>4. Agent 草稿页</strong>
+          <p>访问 <code>/platforms/xhs/agent-drafts</code>，确认侧边栏存在 Agent 草稿入口。先空表单提交，验证必填提示；再填写内容需求、草稿数量和图片数量提交。</p>
+        </div>
+        <div class="step">
+          <strong>5. 结果判断</strong>
+          <p>默认无模型配置时，页面应显示生成失败或缺少默认模型的错误态；配置模型后，期望看到每条草稿卡片、状态、标签、图片预览，并能在草稿工坊中找到已保存草稿。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>七、已知缺口与修复顺序</h2>
+      <ul>
+        <li><span class="status fail">必须先修</span> 更新所有认证相关测试夹具：注册请求补齐唯一邮箱，直接创建 <code>User</code> 的地方补齐 <code>email</code>。</li>
+        <li><span class="status warn">建议补强</span> 为 <code>/forgot-password</code> 和 <code>/reset-password</code> 增加后端测试，覆盖 SMTP 未配置、邮箱不存在、token 无效、token 成功重置。</li>
+        <li><span class="status warn">建议补强</span> 前端当前只有 build，没有 Vitest 或 Playwright 固化用例；建议增加本地 E2E 冒烟，至少覆盖登录、Agent 草稿页、草稿工坊。</li>
+        <li><span class="status warn">浏览器观察</span> Agent 草稿页先空提交再填写内容后，旧的“请描述内容需求”校验提示仍残留在 textarea 下方，但请求已继续发出并显示后端 400 错误态；建议清理该表单校验状态。</li>
+        <li><span class="status warn">环境限制</span> 本轮浏览器插件的 Node REPL 控制面未暴露，真实网页操作已使用本地服务加 Playwright 级浏览器脚本替代。</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>八、通过标准</h2>
+      <div class="note">
+        <p>完成标准不是“页面能打开”，而是：后端 pytest 全绿、前端 build 通过、本地服务健康、真实浏览器完成注册登录和目标页面操作、Agent 草稿在无模型配置时有清晰错误态，在模型配置可用时能创建草稿并在草稿工坊可见。</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

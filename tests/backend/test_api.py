@@ -3890,8 +3890,8 @@ def test_model_configs_create_list_filter_and_encrypt_api_key(tmp_path):
     from backend.app.models import ModelConfig
 
     db_dependency = _override_database(tmp_path)
-    owner_token = _register_and_get_access_token("model-owner")
-    intruder_token = _register_and_get_access_token("model-intruder")
+    owner_token = _register_model_config_test_token("model-owner")
+    intruder_token = _register_model_config_test_token("model-intruder")
     try:
         create_response = client.post(
             "/api/model-configs",
@@ -3958,9 +3958,162 @@ def test_model_configs_create_list_filter_and_encrypt_api_key(tmp_path):
         app.dependency_overrides.pop(db_dependency, None)
 
 
+def _register_model_config_test_token(username: str) -> str:
+    response = client.post(
+        "/api/auth/register",
+        json={"username": username, "email": f"{username}@example.com", "password": "secret123"},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+def test_model_configs_export_includes_all_owned_configs_with_api_keys(tmp_path):
+    db_dependency = _override_database(tmp_path)
+    owner_token = _register_model_config_test_token("model-export-owner")
+    intruder_token = _register_model_config_test_token("model-export-intruder")
+    try:
+        for payload in [
+            {
+                "name": "OpenAI Text",
+                "model_type": "text",
+                "provider": "openai-compatible",
+                "model_name": "gpt-test",
+                "base_url": "https://api.example.test/v1",
+                "api_key": "sk-secret-text",
+                "is_default": True,
+            },
+            {
+                "name": "Image Model",
+                "model_type": "image",
+                "provider": "openai-compatible",
+                "model_name": "image-test",
+                "base_url": "https://image.example.test/v1",
+                "api_key": "sk-secret-image",
+                "is_default": True,
+            },
+        ]:
+            response = client.post(
+                "/api/model-configs",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                json=payload,
+            )
+            assert response.status_code == 200
+
+        intruder_response = client.post(
+            "/api/model-configs",
+            headers={"Authorization": f"Bearer {intruder_token}"},
+            json={
+                "name": "Intruder Text",
+                "model_type": "text",
+                "provider": "openai-compatible",
+                "model_name": "intruder-model",
+                "base_url": "https://intruder.example.test/v1",
+                "api_key": "sk-intruder",
+                "is_default": True,
+            },
+        )
+        assert intruder_response.status_code == 200
+
+        export_response = client.get(
+            "/api/model-configs/export",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+
+        assert export_response.status_code == 200
+        exported = export_response.json()
+        assert exported["version"] == 1
+        assert len(exported["configs"]) == 2
+        by_name = {item["name"]: item for item in exported["configs"]}
+        assert by_name["OpenAI Text"]["api_key"] == "sk-secret-text"
+        assert by_name["Image Model"]["api_key"] == "sk-secret-image"
+        assert all("id" not in item for item in exported["configs"])
+        assert all("encrypted_api_key" not in item for item in exported["configs"])
+        assert "Intruder Text" not in by_name
+    finally:
+        app.dependency_overrides.pop(db_dependency, None)
+
+
+def test_model_configs_import_upserts_all_configs_and_encrypts_api_keys(tmp_path):
+    from backend.app.core.database import get_db
+    from backend.app.core.security import decrypt_text
+    from backend.app.models import ModelConfig
+
+    db_dependency = _override_database(tmp_path)
+    owner_token = _register_model_config_test_token("model-import-owner")
+    try:
+        existing_response = client.post(
+            "/api/model-configs",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={
+                "name": "OpenAI Text",
+                "model_type": "text",
+                "provider": "old-provider",
+                "model_name": "old-model",
+                "base_url": "https://old.example.test/v1",
+                "api_key": "sk-old",
+                "is_default": True,
+            },
+        )
+        assert existing_response.status_code == 200
+
+        import_response = client.post(
+            "/api/model-configs/import",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={
+                "version": 1,
+                "configs": [
+                    {
+                        "name": "OpenAI Text",
+                        "model_type": "text",
+                        "provider": "openai-compatible",
+                        "model_name": "gpt-test",
+                        "base_url": "https://api.example.test/v1",
+                        "api_key": "sk-secret-text",
+                        "is_default": True,
+                    },
+                    {
+                        "name": "Image Model",
+                        "model_type": "image",
+                        "provider": "openai-compatible",
+                        "model_name": "image-test",
+                        "base_url": "https://image.example.test/v1",
+                        "api_key": "sk-secret-image",
+                        "is_default": True,
+                    },
+                ],
+            },
+        )
+
+        assert import_response.status_code == 200
+        imported = import_response.json()
+        assert imported["imported_count"] == 2
+        assert imported["created_count"] == 1
+        assert imported["updated_count"] == 1
+
+        list_response = client.get(
+            "/api/model-configs",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+        assert list_response.status_code == 200
+        assert list_response.json()["total"] == 2
+
+        db = next(app.dependency_overrides[get_db]())
+        try:
+            configs = db.scalars(select(ModelConfig).where(ModelConfig.user_id == 1)).all()
+            by_name = {config.name: config for config in configs}
+            assert by_name["OpenAI Text"].provider == "openai-compatible"
+            assert by_name["OpenAI Text"].model_name == "gpt-test"
+            assert decrypt_text(by_name["OpenAI Text"].encrypted_api_key) == "sk-secret-text"
+            assert decrypt_text(by_name["Image Model"].encrypted_api_key) == "sk-secret-image"
+        finally:
+            db.close()
+    finally:
+        app.dependency_overrides.pop(db_dependency, None)
+
+
 def test_text_model_config_defaults_to_gpt_54_when_model_name_omitted(tmp_path):
     db_dependency = _override_database(tmp_path)
-    owner_token = _register_and_get_access_token("model-default-owner")
+    owner_token = _register_model_config_test_token("model-default-owner")
     try:
         response = client.post(
             "/api/model-configs",
@@ -3983,8 +4136,8 @@ def test_text_model_config_defaults_to_gpt_54_when_model_name_omitted(tmp_path):
 
 def test_model_configs_update_and_set_default_are_owner_scoped(tmp_path):
     db_dependency = _override_database(tmp_path)
-    owner_token = _register_and_get_access_token("model-update-owner")
-    intruder_token = _register_and_get_access_token("model-update-intruder")
+    owner_token = _register_model_config_test_token("model-update-owner")
+    intruder_token = _register_model_config_test_token("model-update-intruder")
     try:
         first_response = client.post(
             "/api/model-configs",

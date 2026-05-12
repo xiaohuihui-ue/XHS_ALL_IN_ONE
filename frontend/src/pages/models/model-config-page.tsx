@@ -2,6 +2,7 @@ import {
   ApiOutlined,
   CheckCircleOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   EditOutlined,
   FileImageOutlined,
   KeyOutlined,
@@ -9,6 +10,7 @@ import {
   ReloadOutlined,
   RobotOutlined,
   StarOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
@@ -27,19 +29,26 @@ import {
   Tag,
   Typography,
 } from "antd";
-import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "../../components/layout/app-shell";
 import {
   createModelConfig,
   deleteModelConfig,
+  exportModelConfigs,
   fetchModelConfigs,
+  importModelConfigs,
   setDefaultModelConfig,
   testModelConfig,
   updateModelConfig,
 } from "../../lib/api";
 import type { ModelConfig, ModelConfigPayload, ModelType } from "../../types";
+import {
+  createModelConfigBackupFileName,
+  modelConfigBackupToJson,
+  normalizeModelConfigBackup,
+} from "./model-config-json";
 
 const { Text } = Typography;
 
@@ -70,8 +79,11 @@ const cardStyle = { background: "#1f1f1f", borderColor: "#303030" };
 export function ModelConfigPage() {
   const [configs, setConfigs] = useState<ModelConfig[]>([]);
   const [form, setForm] = useState<ModelConfigPayload>(emptyForm);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -161,6 +173,53 @@ export function ModelConfigPage() {
     setForm({ ...emptyForm, model_type: form.model_type });
   }
 
+  async function handleExportJson() {
+    setMessage(null);
+    setError(null);
+    setIsExporting(true);
+    try {
+      const backup = await exportModelConfigs();
+      const blob = new Blob([modelConfigBackupToJson(backup.configs)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = createModelConfigBackupFileName();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setMessage(`已导出 ${backup.configs.length} 个模型配置。JSON 包含 API Key，请妥善保管。`);
+    } catch {
+      setError("模型配置导出失败。");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  async function handleImportJson(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setMessage(null);
+    setError(null);
+    setIsImporting(true);
+    try {
+      const configs = normalizeModelConfigBackup(JSON.parse(await file.text()));
+      const result = await importModelConfigs({ version: 1, configs });
+      setEditingId(null);
+      setForm({ ...emptyForm, model_type: form.model_type });
+      await loadConfigs();
+      setMessage(`JSON 已导入：新增 ${result.created_count} 个，更新 ${result.updated_count} 个。`);
+    } catch (err) {
+      setError(err instanceof Error ? `JSON 导入失败：${err.message}` : "JSON 导入失败。");
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   async function handleDelete(configId: number) {
     setError(null);
     setMessage(null);
@@ -217,13 +276,37 @@ export function ModelConfigPage() {
         title="模型配置"
         description="为改写、生成、封面和图片处理配置用户级文本与图片模型，后续 AI 任务会从默认配置解析调用参数。"
         action={
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={loadConfigs}
-            loading={isLoading}
-          >
-            刷新
-          </Button>
+          <Space wrap>
+            <Button
+              icon={<UploadOutlined />}
+              onClick={() => importInputRef.current?.click()}
+              loading={isImporting}
+            >
+              导入 JSON
+            </Button>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={() => void handleExportJson()}
+              loading={isExporting}
+            >
+              导出全部配置
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={loadConfigs}
+              loading={isLoading}
+            >
+              刷新
+            </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              aria-label="导入模型配置 JSON"
+              onChange={(event) => void handleImportJson(event)}
+              style={{ display: "none" }}
+            />
+          </Space>
         }
       />
 
@@ -236,6 +319,8 @@ export function ModelConfigPage() {
           <Typography.Link href="https://api.openai-next.com/" target="_blank" rel="noreferrer">api.openai-next.com</Typography.Link> — OpenAI 中转，Base URL: <Typography.Text code>https://api.openai-next.com/v1</Typography.Text><br />
           <Typography.Link href="https://www.volcengine.com/product/doubao" target="_blank" rel="noreferrer">火山引擎（豆包）</Typography.Link> — 字节跳动大模型平台，Base URL: <Typography.Text code>https://ark.cn-beijing.volces.com/api/v3</Typography.Text><br />
           <Typography.Link href="https://bailian.console.aliyun.com/" target="_blank" rel="noreferrer">阿里云百炼</Typography.Link> — 通义千问系列，Base URL: <Typography.Text code>https://dashscope.aliyuncs.com/compatible-mode/v1</Typography.Text>
+          <br />
+          导出的 JSON 会包含所有模型配置和 API Key，仅用于个人备份和迁移。
         </>}
       />
 

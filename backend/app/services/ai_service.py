@@ -490,20 +490,74 @@ class OpenAICompatibleImageClient:
 
     @staticmethod
     def _resolve_image_ref(url: str) -> str:
+        from pathlib import Path
+        from backend.app.core.config import get_settings
+
+        # Full HTTP(S) URLs - return as-is
         if url.startswith("http://") or url.startswith("https://"):
             return url
+
+        # Data URLs - return as-is
+        if url.startswith("data:"):
+            return url
+
+        # File protocol URLs - read local file
+        if url.startswith("file://"):
+            file_path = url[7:]  # Strip "file://"
+            # Handle Windows paths (C:\path or /path)
+            if len(file_path) > 2 and file_path[1] == ":":
+                local = Path(file_path)
+            else:
+                local = Path(file_path.lstrip("/"))
+            if local.is_file():
+                return OpenAICompatibleImageClient._to_base64_data_url(local)
+            return url
+
+        # Backend API media paths - /api/files/media/{filename}
         if url.startswith("/api/files/media/"):
-            import base64
-            from pathlib import Path
-            from backend.app.core.config import get_settings
             file_name = url.split("/")[-1]
             local = Path(get_settings().storage_dir) / "media" / file_name
             if local.is_file():
-                raw = local.read_bytes()
-                ext = local.suffix.lower().lstrip(".")
-                mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/png")
-                return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
+                return OpenAICompatibleImageClient._to_base64_data_url(local)
+            return url
+
+        # Frontend media paths - media/{filename} or /media/{filename}
+        media_path = url.lstrip("/")
+        if media_path.startswith("media/"):
+            local = Path(get_settings().storage_dir) / media_path
+            if local.is_file():
+                return OpenAICompatibleImageClient._to_base64_data_url(local)
+            # Try as relative to storage_dir root
+            local = Path(get_settings().storage_dir) / "media" / media_path.split("/")[-1]
+            if local.is_file():
+                return OpenAICompatibleImageClient._to_base64_data_url(local)
+
+        # Relative URLs with frontend_url prefix
+        settings = get_settings()
+        if settings.frontend_url:
+            frontend_url = settings.frontend_url.rstrip("/")
+            if url.startswith(frontend_url):
+                url = url[len(frontend_url):]
+                if url.startswith("/api/files/media/"):
+                    file_name = url.split("/")[-1]
+                    local = Path(get_settings().storage_dir) / "media" / file_name
+                    if local.is_file():
+                        return OpenAICompatibleImageClient._to_base64_data_url(local)
+
+        # Try direct path relative to storage_dir/media
+        local = Path(get_settings().storage_dir) / "media" / url.split("/")[-1]
+        if local.is_file():
+            return OpenAICompatibleImageClient._to_base64_data_url(local)
+
         return url
+
+    @staticmethod
+    def _to_base64_data_url(local: Path) -> str:
+        import base64
+        raw = local.read_bytes()
+        ext = local.suffix.lower().lstrip(".")
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp", "svg": "image/svg+xml"}.get(ext, "image/png")
+        return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
     def describe_image(
         self,

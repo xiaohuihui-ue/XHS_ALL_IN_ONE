@@ -47,6 +47,9 @@ function authErrorMessage(error: unknown, fallback: string): string {
   if (detail === "Username already exists") {
     return "该平台账号已存在，请直接登录或换一个账号。";
   }
+  if (detail === "Email already exists") {
+    return "该邮箱已被注册，请直接登录或换一个邮箱。";
+  }
   if (typeof detail === "string" && detail.trim()) {
     return detail;
   }
@@ -85,13 +88,13 @@ async function login(credentials: api.AuthCredentials): Promise<void> {
   }
 }
 
-async function register(credentials: api.AuthCredentials): Promise<void> {
+async function register(credentials: api.RegisterCredentials): Promise<void> {
   emit({ ...snapshot, error: null });
   try {
     const payload = await api.register(credentials);
     emit({ status: "authenticated", user: payload.user, error: null });
   } catch (error) {
-    const message = authErrorMessage(error, "注册失败，该平台账号可能已存在。");
+    const message = authErrorMessage(error, "注册失败，请检查后重试。");
     emit({ status: "anonymous", user: null, error: message });
     throw new Error(message);
   }
@@ -100,6 +103,14 @@ async function register(credentials: api.AuthCredentials): Promise<void> {
 async function logout(): Promise<void> {
   await api.logout();
   emit({ status: "anonymous", user: null, error: null });
+}
+
+async function forgotPassword(email: string): Promise<void> {
+  await api.forgotPassword(email);
+}
+
+async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await api.resetPassword(token, newPassword);
 }
 
 export function useAuth() {
@@ -115,6 +126,8 @@ export function useAuth() {
     isChecking: current.status === "checking",
     login,
     register,
-    logout
+    logout,
+    forgotPassword,
+    resetPassword,
   };
 }

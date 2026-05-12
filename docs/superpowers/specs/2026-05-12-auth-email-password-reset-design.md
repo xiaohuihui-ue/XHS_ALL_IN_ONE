@@ -43,7 +43,15 @@ email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullabl
 
 ### 2. 配置层
 
-**`config/default.yaml`** 新增 `email` 配置块：
+**`config/default.yaml`** 新增两处：
+
+`server` 块加 `frontend_url`（用于构造重置邮件中的链接）：
+```yaml
+server:
+  frontend_url: "http://localhost:5173"
+```
+
+新增 `email` 配置块：
 ```yaml
 email:
   smtp_host: ""
@@ -54,7 +62,9 @@ email:
   smtp_tls: true
 ```
 
-**`backend/app/core/config.py`** 的 `Settings` 类新增对应字段，并加入 `yaml_key_map` 映射。
+**`backend/app/core/config.py`** 的 `Settings` 类新增对应字段，并加入 `yaml_key_map` 映射：
+- `server.frontend_url` → `FRONTEND_URL`
+- `email.*` → `EMAIL_SMTP_HOST` 等
 
 SMTP 配置未填写时，`/forgot-password` 端点返回 503，提示管理员未配置邮件服务。
 
@@ -93,7 +103,7 @@ Response: 200 { "detail": "如果该邮箱已注册，重置链接已发送至�
 
 - 无论邮箱是否存在，始终返回相同响应（防止邮箱枚举攻击）
 - 邮箱存在时：生成 JWT（`token_type=password_reset`，30 分钟），发送重置邮件
-- 邮件内容包含链接：`{前端域}/reset-password?token=<jwt>`
+- 邮件内容包含链接：`{settings.frontend_url}/reset-password?token=<jwt>`（`frontend_url` 从配置读取）
 
 #### 3.4 新端点：`POST /auth/reset-password`
 
@@ -168,8 +178,8 @@ SMTP 未配置（smtp_host 为空）时抛出 `RuntimeError`，由端点捕获�
 
 - 从 URL query param 读取 `token`
 - 两个输入框：新密码 + 确认密码
-- 提交成功后跳转登录页，并显示 Alert："密码已重置，请重新登录。"
-- token 无效或过期：显示错误 Alert + "重新申请"链接
+- 提交成功后：页面切换为成功状态，显示 Alert："密码已重置，请重新登录。" + "去登录"按钮（跳转 `/login`）
+- token 无效或过期：显示错误 Alert + "重新申请"链接（跳转 `/forgot-password`）
 
 ---
 
@@ -183,7 +193,7 @@ SMTP 未配置（smtp_host 为空）时抛出 `RuntimeError`，由端点捕获�
 | `backend/app/core/email.py` | 新建：发送重置邮件 |
 | `backend/app/core/security.py` | 加 `create_password_reset_token` |
 | `backend/app/api/auth.py` | 拆 schema，修改 register，加两个新端点 |
-| `config/default.yaml` | 加 email 配置块 |
+| `config/default.yaml` | 加 `server.frontend_url` 和 `email` 配置块 |
 | `frontend/src/lib/api.ts` | register 加 email 参数 |
 | `frontend/src/hooks/use-auth.ts` | register 加 email，加错误映射，加 forgot/reset API 调用 |
 | `frontend/src/pages/login/login-page.tsx` | 加邮箱字段，加忘记密码链接，修正错误消息 |

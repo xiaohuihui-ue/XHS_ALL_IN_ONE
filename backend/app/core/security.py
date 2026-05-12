@@ -16,6 +16,7 @@ from backend.app.core.config import get_settings
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 30
 PASSWORD_ITERATIONS = 260_000
 
 
@@ -69,6 +70,10 @@ def create_access_token(user_id: int) -> str:
 
 def create_refresh_token(user_id: int) -> str:
     return _create_token(user_id, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS), "refresh")
+
+
+def create_password_reset_token(user_id: int) -> str:
+    return _create_token(user_id, timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES), "password_reset")
 
 
 def decode_token(token: str) -> dict:

@@ -37,6 +37,8 @@ import type {
   KeywordGroupDetail,
   KeywordGroupPayload,
   ModelConfig,
+  ModelConfigBackup,
+  ModelConfigImportResult,
   ModelConfigPayload,
   ModelType,
   MonitoringNote,
@@ -89,6 +91,12 @@ let accessToken: string | null = null;
 
 export type AuthCredentials = {
   username: string;
+  password: string;
+};
+
+export type RegisterCredentials = {
+  username: string;
+  email: string;
   password: string;
 };
 
@@ -159,9 +167,17 @@ export async function login(credentials: AuthCredentials): Promise<AuthPayload> 
   return persistAuthPayload(response.data);
 }
 
-export async function register(credentials: AuthCredentials): Promise<AuthPayload> {
+export async function register(credentials: RegisterCredentials): Promise<AuthPayload> {
   const response = await http.post<AuthPayload>("/auth/register", credentials);
   return persistAuthPayload(response.data);
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  await http.post("/auth/forgot-password", { email }, { _silent: true } as never);
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await http.post("/auth/reset-password", { token, new_password: newPassword }, { _silent: true } as never);
 }
 
 export async function refreshAccessToken(): Promise<string> {
@@ -594,6 +610,16 @@ export async function fetchModelConfigs(modelType?: ModelType): Promise<Paginate
 
 export async function createModelConfig(payload: ModelConfigPayload): Promise<ModelConfig> {
   const response = await http.post<ModelConfig>("/model-configs", payload);
+  return response.data;
+}
+
+export async function exportModelConfigs(): Promise<ModelConfigBackup> {
+  const response = await http.get<ModelConfigBackup>("/model-configs/export");
+  return response.data;
+}
+
+export async function importModelConfigs(payload: ModelConfigBackup): Promise<ModelConfigImportResult> {
+  const response = await http.post<ModelConfigImportResult>("/model-configs/import", payload);
   return response.data;
 }
 

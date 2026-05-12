@@ -356,6 +356,18 @@ export type ModelConfigPayload = {
   is_default: boolean;
 };
 
+export type ModelConfigBackup = {
+  version: 1;
+  configs: ModelConfigPayload[];
+};
+
+export type ModelConfigImportResult = {
+  imported_count: number;
+  created_count: number;
+  updated_count: number;
+  items: ModelConfig[];
+};
+
 export type RewriteDraftPayload = {
   draft_id: number;
   instruction?: string;

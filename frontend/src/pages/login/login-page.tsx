@@ -2,6 +2,7 @@ import {
   ArrowRightOutlined,
   DatabaseOutlined,
   LockOutlined,
+  MailOutlined,
   RadarChartOutlined,
   RobotOutlined,
   UserOutlined,
@@ -20,7 +21,7 @@ import {
   Typography,
 } from "antd";
 import { type FormEvent, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
 import { useAuth } from "../../hooks/use-auth";
@@ -29,7 +30,7 @@ const { Title, Text, Paragraph } = Typography;
 
 type AuthMode = "login" | "register";
 
-const credentialsSchema = z.object({
+const loginSchema = z.object({
   username: z
     .string()
     .trim()
@@ -41,9 +42,9 @@ const credentialsSchema = z.object({
     .max(128, "密码不能超过 128 个字符"),
 });
 
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback;
-}
+const registerSchema = loginSchema.extend({
+  email: z.string().email("请输入有效的邮箱地址"),
+});
 
 export function LoginPage() {
   const auth = useAuth();
@@ -51,6 +52,7 @@ export function LoginPage() {
   const location = useLocation();
   const [mode, setMode] = useState<AuthMode>("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -60,39 +62,42 @@ export function LoginPage() {
     if (event) event.preventDefault();
     setError(null);
 
-    const parsed = credentialsSchema.safeParse({ username, password });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "请检查账号和密码。");
-      return;
-    }
-
-    if (mode === "register" && password !== confirmPassword) {
-      setError("两次输入的密码不一致。");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      if (mode === "login") {
-        await auth.login(parsed.data);
-      } else {
-        await auth.register(parsed.data);
+    if (mode === "login") {
+      const parsed = loginSchema.safeParse({ username, password });
+      if (!parsed.success) {
+        setError(parsed.error.issues[0]?.message ?? "请检查账号和密码。");
+        return;
       }
-      const from = (
-        location.state as { from?: { pathname?: string } } | null
-      )?.from?.pathname;
-      navigate(from || "/platforms/xhs/dashboard", { replace: true });
-    } catch (caughtError) {
-      setError(
-        errorMessage(
-          caughtError,
-          mode === "login"
-            ? "账号不存在或密码错误，请检查后重试。"
-            : "注册失败，该平台账号可能已存在。"
-        )
-      );
-    } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(true);
+      try {
+        await auth.login(parsed.data);
+        const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+        navigate(from || "/platforms/xhs/dashboard", { replace: true });
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : "账号不存在或密码错误，请检查后重试。");
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      const parsed = registerSchema.safeParse({ username, email, password });
+      if (!parsed.success) {
+        setError(parsed.error.issues[0]?.message ?? "请检查填写内容。");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("两次输入的密码不一致。");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await auth.register(parsed.data);
+        const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+        navigate(from || "/platforms/xhs/dashboard", { replace: true });
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : "注册失败，请检查后重试。");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   }
 
@@ -209,7 +214,7 @@ export function LoginPage() {
           </Row>
         </Col>
 
-        {/* Right side: login form */}
+        {/* Right side: login/register form */}
         <Col xs={24} md={12}>
           <Card
             style={{
@@ -262,7 +267,21 @@ export function LoginPage() {
                   />
                 </Form.Item>
 
-                <Form.Item label="密码" style={{ marginBottom: 16 }}>
+                {mode === "register" && (
+                  <Form.Item label="邮箱" style={{ marginBottom: 16 }}>
+                    <Input
+                      prefix={<MailOutlined />}
+                      placeholder="请输入邮箱地址"
+                      autoComplete="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      size="large"
+                    />
+                  </Form.Item>
+                )}
+
+                <Form.Item label="密码" style={{ marginBottom: 8 }}>
                   <Input.Password
                     prefix={<LockOutlined />}
                     placeholder="请输入密码"
@@ -275,8 +294,19 @@ export function LoginPage() {
                   />
                 </Form.Item>
 
+                {mode === "login" && (
+                  <div style={{ textAlign: "right", marginBottom: 16 }}>
+                    <Link
+                      to="/forgot-password"
+                      style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}
+                    >
+                      忘记密码？
+                    </Link>
+                  </div>
+                )}
+
                 {mode === "register" && (
-                  <Form.Item label="确认密码" style={{ marginBottom: 16 }}>
+                  <Form.Item label="确认密码" style={{ marginBottom: 16, marginTop: 8 }}>
                     <Input.Password
                       prefix={<LockOutlined />}
                       placeholder="请再次输入密码"

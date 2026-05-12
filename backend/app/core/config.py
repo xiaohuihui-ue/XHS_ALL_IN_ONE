@@ -32,6 +32,7 @@ def _load_yaml_config() -> Dict[str, Any]:
         "server.host": "server_host",
         "server.port": "server_port",
         "server.cors_origins": "backend_cors_origins",
+        "server.frontend_url": "frontend_url",
         "database.type": "database_type",
         "database.sqlite_path": "database_sqlite_path",
         "database.mysql_host": "database_mysql_host",
@@ -45,6 +46,12 @@ def _load_yaml_config() -> Dict[str, Any]:
         "scheduler.interval_seconds": "scheduler_interval_seconds",
         "frontend.serve_static": "frontend_serve_static",
         "frontend.build_dir": "frontend_build_dir",
+        "email.smtp_host": "smtp_host",
+        "email.smtp_port": "smtp_port",
+        "email.smtp_user": "smtp_user",
+        "email.smtp_password": "smtp_password",
+        "email.smtp_from": "smtp_from",
+        "email.smtp_tls": "smtp_tls",
     }
 
     def _flatten(data: Any, prefix: str = "") -> None:
@@ -114,6 +121,15 @@ class Settings(BaseSettings):
     # Frontend static serving
     frontend_serve_static: bool = False
     frontend_build_dir: str = "./frontend/dist"
+    frontend_url: str = "http://localhost:5173"
+
+    # Email / SMTP
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_tls: bool = True
 
     if hasattr(BaseSettings, "model_config"):
         model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

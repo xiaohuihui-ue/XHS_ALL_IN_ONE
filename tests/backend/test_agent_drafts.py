@@ -130,3 +130,23 @@ def test_generate_agent_drafts_raises_when_both_passes_fail():
                 output_requirements=None,
                 reference_image_urls=[],
             )
+
+
+def test_serialize_draft_includes_tags():
+    """_serialize_draft must include tags in its output dict."""
+    from backend.app.api.ai import _serialize_draft
+    from backend.app.models import AiDraft
+    from datetime import datetime
+
+    draft = AiDraft()
+    draft.id = 1
+    draft.platform = "xhs"
+    draft.title = "Test"
+    draft.body = "Body"
+    draft.tags = [{"name": "低卡早餐"}]
+    draft.source_note_id = None
+    draft.created_at = datetime(2026, 5, 12, 9, 0, 0)
+
+    result = _serialize_draft(draft)
+    assert "tags" in result
+    assert result["tags"] == [{"name": "低卡早餐"}]

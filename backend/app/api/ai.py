@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_user
 from backend.app.core.security import decrypt_text
-from backend.app.models import AiDraft, AiGeneratedAsset, ModelConfig, Task, User
+from backend.app.models import AiDraft, AiGeneratedAsset, DraftAsset, ModelConfig, Task, User
 from backend.app.schemas.common import paginated
 from backend.app.services.ai_service import ImageAiClient, OpenAICompatibleImageClient, OpenAICompatibleTextClient, TextAiClient
 
@@ -65,6 +65,49 @@ class DescribeImageRequest(BaseModel):
     instruction: str = Field(default="", max_length=800)
 
 
+class _ImageUrlPart(BaseModel):
+    url: str
+
+
+class _ContentPart(BaseModel):
+    type: Literal["text", "image_url"]
+    text: str | None = None
+    image_url: _ImageUrlPart | None = None
+
+
+class _AgentMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str | list[_ContentPart]
+
+
+class _ImageOptions(BaseModel):
+    model: str | None = None
+    n: int = Field(default=1, ge=0, le=3)
+    size: str | None = None
+    quality: str | None = None
+    style: str | None = None
+    response_format: str | None = None
+
+
+class _AgentMetadata(BaseModel):
+    platform: Literal["xhs"]
+    save_to_drafts: str | None = None
+    output_requirements: str | None = None
+
+
+class AgentDraftsChatRequest(BaseModel):
+    model: str | None = None
+    messages: list[_AgentMessage] = Field(min_length=1)
+    n: int = Field(default=3, ge=1, le=10)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=1.0, ge=0.0, le=1.0)
+    stream: Literal[False] | None = None
+    response_format: dict[str, Any] | None = None
+    metadata: _AgentMetadata | None = None
+    image_options: _ImageOptions = Field(default_factory=_ImageOptions)
+    user: str | None = None
+
+
 def get_text_ai_client() -> TextAiClient:
     return OpenAICompatibleTextClient()
 
@@ -79,6 +122,7 @@ def _serialize_draft(draft: AiDraft) -> dict:
         "platform": draft.platform,
         "title": draft.title,
         "body": draft.body,
+        "tags": draft.tags or [],
         "source_note_id": draft.source_note_id,
         "created_at": draft.created_at.isoformat(),
     }

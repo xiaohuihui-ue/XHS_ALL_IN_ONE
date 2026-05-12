@@ -714,3 +714,76 @@ export type AppNotification = {
   read: boolean;
   created_at: string;
 };
+
+export interface AgentDraftRequestMessage {
+  role: "system" | "user" | "assistant";
+  content:
+    | string
+    | Array<
+        | { type: "text"; text: string }
+        | { type: "image_url"; image_url: { url: string } }
+      >;
+}
+
+export interface AgentDraftPayload {
+  model?: string;
+  messages: AgentDraftRequestMessage[];
+  n?: number;
+  temperature?: number;
+  top_p?: number;
+  stream?: false;
+  response_format?: {
+    type: "json_schema";
+    json_schema: {
+      name: string;
+      strict: boolean;
+      schema: Record<string, unknown>;
+    };
+  };
+  metadata?: {
+    platform: "xhs";
+    save_to_drafts?: string;
+    output_requirements?: string;
+  };
+  image_options?: {
+    model?: string;
+    n?: number;
+    size?: string;
+    quality?: string;
+    style?: string;
+    response_format?: string;
+  };
+  user?: string;
+}
+
+export interface AgentDraftItem {
+  draft: {
+    id: number;
+    platform: string;
+    title: string;
+    body: string;
+    tags: Array<{ name: string }>;
+    created_at: string;
+  };
+  image_prompt: {
+    positive_prompt: string;
+    negative_prompt: string;
+    reference_strategy: string;
+  };
+  assets: Array<{
+    id: number;
+    draft_id: number;
+    asset_type: string;
+    url: string;
+    local_path: string;
+    sort_order: number;
+  }>;
+  status: "completed" | "partial" | "failed";
+  errors: string[];
+}
+
+export interface AgentDraftBatchResult {
+  items: AgentDraftItem[];
+  created_count: number;
+  failed_count: number;
+}

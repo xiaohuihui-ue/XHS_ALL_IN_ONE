@@ -74,7 +74,9 @@ import type {
   XhsDataCrawlResponse,
   XhsSearchOptions,
   XhsSearchNote,
-  XhsQrLoginSession
+  XhsQrLoginSession,
+  AgentDraftPayload,
+  AgentDraftBatchResult
 } from "../types";
 
 const http = axios.create({
@@ -867,4 +869,13 @@ export async function deleteAutoTask(taskId: number): Promise<{ id: number; stat
 export async function runAutoTask(taskId: number): Promise<AutoTaskRunResult> {
   const response = await http.post<AutoTaskRunResult>(`/auto-tasks/${taskId}/run`);
   return response.data;
+}
+
+export async function generateAgentDrafts(
+  payload: AgentDraftPayload
+): Promise<AgentDraftBatchResult> {
+  const res = await http.post<{
+    choices: Array<{ message: { content: string } }>;
+  }>("/ai/agent-drafts/chat/completions", payload);
+  return JSON.parse(res.data.choices[0].message.content) as AgentDraftBatchResult;
 }

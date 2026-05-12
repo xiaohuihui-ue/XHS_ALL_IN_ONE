@@ -62,6 +62,20 @@ class TextAiClient(Protocol):
     ) -> str:
         ...
 
+    def generate_agent_drafts(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        messages: list[dict],
+        n: int,
+        temperature: float,
+        top_p: float,
+        output_requirements: str | None,
+        reference_image_urls: list[str],
+    ) -> dict:
+        ...
+
 
 class ImageAiClient(Protocol):
     def generate_cover(
@@ -233,6 +247,176 @@ class OpenAICompatibleTextClient:
             system_prompt="你是小红书正文润色编辑。",
             user_prompt=f"润色要求：{instruction or '更自然、清晰、有种草感'}\n\n原文：\n{text}",
         )
+
+    _AGENT_DRAFT_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "drafts": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "body": {"type": "string"},
+                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "image_prompt": {
+                            "type": "object",
+                            "properties": {
+                                "positive_prompt": {"type": "string"},
+                                "negative_prompt": {"type": "string"},
+                                "reference_strategy": {"type": "string"},
+                            },
+                            "required": ["positive_prompt", "negative_prompt", "reference_strategy"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "required": ["title", "body", "tags", "image_prompt"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["drafts"],
+        "additionalProperties": False,
+    }
+
+    @staticmethod
+    def _strip_fences(text: str) -> str:
+        import re
+        return re.sub(r"^```(?:json)?\s*\n?", "", re.sub(r"\n?```\s*$", "", text.strip()))
+
+    @staticmethod
+    def _validate_agent_draft_schema(data: dict) -> None:
+        if "drafts" not in data or not isinstance(data["drafts"], list):
+            raise ValueError("structured output missing 'drafts' array")
+        for item in data["drafts"]:
+            for key in ("title", "body", "tags", "image_prompt"):
+                if key not in item:
+                    raise ValueError(f"structured output item missing '{key}'")
+
+    def _call_chat(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        messages: list[dict],
+        temperature: float,
+        top_p: float,
+        extra_body: dict | None = None,
+    ) -> str:
+        if not model_config.base_url:
+            raise ValueError("Text model base_url is required")
+        if not model_config.model_name:
+            raise ValueError("Text model_name is required")
+        if not api_key:
+            raise ValueError("Text model api_key is required")
+
+        body: dict = {
+            "model": model_config.model_name,
+            "messages": messages,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+        if extra_body:
+            body.update(extra_body)
+
+        endpoint = f"{model_config.base_url.rstrip('/')}/chat/completions"
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=body,
+            timeout=120,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        try:
+            return payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ValueError("AI response missing choices[0].message.content") from exc
+
+    def generate_agent_drafts(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        messages: list[dict],
+        n: int,
+        temperature: float,
+        top_p: float,
+        output_requirements: str | None,
+        reference_image_urls: list[str],
+    ) -> dict:
+        import json
+
+        prepared = list(messages)
+        if output_requirements:
+            for i, msg in enumerate(prepared):
+                if msg.get("role") == "system":
+                    updated = dict(msg)
+                    updated["content"] = f"{msg['content']}\n\nOutput requirements: {output_requirements}"
+                    prepared[i] = updated
+                    break
+            else:
+                prepared.insert(0, {"role": "system", "content": f"Output requirements: {output_requirements}"})
+
+        schema_body = {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "xhs_agent_draft_batch",
+                    "strict": True,
+                    "schema": self._AGENT_DRAFT_SCHEMA,
+                },
+            }
+        }
+
+        # Pass 1: native structured output
+        try:
+            content = self._call_chat(
+                model_config=model_config,
+                api_key=api_key,
+                messages=prepared,
+                temperature=temperature,
+                top_p=top_p,
+                extra_body=schema_body,
+            )
+            data = json.loads(content)
+            self._validate_agent_draft_schema(data)
+            return data
+        except Exception:
+            pass
+
+        # Pass 2: prompt injection fallback
+        schema_str = json.dumps(self._AGENT_DRAFT_SCHEMA, ensure_ascii=False)
+        injection = (
+            "\n\nYou must respond with a single valid JSON object and nothing else.\n"
+            "Do not wrap the JSON in markdown code fences.\n"
+            f"The JSON must conform to this schema:\n<schema>\n{schema_str}\n</schema>"
+        )
+        fallback_messages = list(prepared)
+        injected = False
+        for i, msg in enumerate(fallback_messages):
+            if msg.get("role") == "system":
+                fallback_messages[i] = dict(msg)
+                fallback_messages[i]["content"] = str(msg["content"]) + injection
+                injected = True
+                break
+        if not injected:
+            fallback_messages.insert(0, {"role": "system", "content": injection.strip()})
+
+        try:
+            content = self._call_chat(
+                model_config=model_config,
+                api_key=api_key,
+                messages=fallback_messages,
+                temperature=temperature,
+                top_p=top_p,
+            )
+            stripped = self._strip_fences(content)
+            data = json.loads(stripped)
+            self._validate_agent_draft_schema(data)
+            return data
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ValueError(f"structured output failed after both passes: {exc}") from exc
 
 
 class OpenAICompatibleImageClient:

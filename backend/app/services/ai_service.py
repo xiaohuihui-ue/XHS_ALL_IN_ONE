@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import Any, Protocol
 
 import requests
@@ -281,7 +283,6 @@ class OpenAICompatibleTextClient:
 
     @staticmethod
     def _strip_fences(text: str) -> str:
-        import re
         return re.sub(r"^```(?:json)?\s*\n?", "", re.sub(r"\n?```\s*$", "", text.strip()))
 
     @staticmethod
@@ -345,8 +346,6 @@ class OpenAICompatibleTextClient:
         output_requirements: str | None,
         reference_image_urls: list[str],
     ) -> dict:
-        import json
-
         prepared = list(messages)
         if output_requirements:
             for i, msg in enumerate(prepared):
@@ -382,7 +381,7 @@ class OpenAICompatibleTextClient:
             data = json.loads(content)
             self._validate_agent_draft_schema(data)
             return data
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             pass
 
         # Pass 2: prompt injection fallback

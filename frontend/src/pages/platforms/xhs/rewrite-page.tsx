@@ -8,7 +8,6 @@ import {
   HighlightOutlined,
   InboxOutlined,
   LinkOutlined,
-  PictureOutlined,
   PlayCircleOutlined,
   PlusCircleOutlined,
   PlusOutlined,
@@ -543,10 +542,10 @@ export function XhsDraftsPage() {
     void loadDrafts();
   }, []);
 
-  // Reload drafts list when generation finishes
+  // Reload drafts list when generation finishes and switch to rewrite mode
   useEffect(() => {
     if (prevGenRunningRef.current && !genRunning && genSteps.length > 0) {
-      void loadDrafts();
+      void loadDrafts().then(() => setActiveMode("rewrite"));
     }
     prevGenRunningRef.current = genRunning;
   }, [genRunning]);
@@ -703,41 +702,6 @@ export function XhsDraftsPage() {
                 {sourceNote.content}
               </Paragraph>
 
-              {hasImageAssets && (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      <FileImageOutlined /> 图片素材 ({imageAssets.length}) — 拖拽调整顺序
-                    </Text>
-                  </div>
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={imageAssets.map((a) => a.id)} strategy={horizontalListSortingStrategy}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-                        {imageAssets.map((asset) => (
-                          <SortableRewriteImage
-                            key={asset.id}
-                            asset={asset}
-                            onEdit={() => { setOptimizeAssetId(asset.id); setOptimizeModalOpen(true); }}
-                            onRemove={() => handleRemoveAsset(asset.id)}
-                            onView={() => setPreviewImage(asset.url || asset.local_path)}
-                          />
-                        ))}
-                        <div
-                          onClick={() => setUploadModalOpen(true)}
-                          style={{
-                            width: 60, height: 60, borderRadius: 4, border: "1px dashed #434343",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            cursor: "pointer", background: "rgba(255,255,255,0.04)",
-                          }}
-                        >
-                          <PlusOutlined style={{ fontSize: 20, color: "#8c8c8c" }} />
-                        </div>
-                      </div>
-                    </SortableContext>
-                  </DndContext>
-                </div>
-              )}
-
               {hasVideoAssets && (
                 <div style={{ marginBottom: 8 }}>
                   {sourceAssets.filter((a) => a.asset_type === "video").map((asset) => (
@@ -761,17 +725,50 @@ export function XhsDraftsPage() {
                 <Tag color={hasVideoAssets ? "purple" : "blue"}>
                   {hasVideoAssets ? "视频" : "图文"}
                 </Tag>
-                {hasImageAssets && (
-                  <>
-                    <PictureOutlined style={{ color: "#8c8c8c", fontSize: 12 }} />
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {sourceAssets.filter((a) => a.asset_type === "image").length} 张图片
-                    </Text>
-                  </>
-                )}
               </Space>
             </Card>
           )}
+
+          {/* Image assets — shown for all drafts including AI-generated ones without a source note */}
+          {selectedDraft && (
+            <Card
+              title={<Space><FileImageOutlined /><span>图片素材 {hasImageAssets ? `(${imageAssets.length})` : ""}</span></Space>}
+              size="small"
+              style={{ marginBottom: 16 }}
+            >
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={imageAssets.map((a) => a.id)} strategy={horizontalListSortingStrategy}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                    {imageAssets.map((asset) => (
+                      <SortableRewriteImage
+                        key={asset.id}
+                        asset={asset}
+                        onEdit={() => { setOptimizeAssetId(asset.id); setOptimizeModalOpen(true); }}
+                        onRemove={() => handleRemoveAsset(asset.id)}
+                        onView={() => setPreviewImage(asset.url || asset.local_path)}
+                      />
+                    ))}
+                    <div
+                      onClick={() => setUploadModalOpen(true)}
+                      style={{
+                        width: 60, height: 60, borderRadius: 4, border: "1px dashed #434343",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", background: "rgba(255,255,255,0.04)",
+                      }}
+                    >
+                      <PlusOutlined style={{ fontSize: 20, color: "#8c8c8c" }} />
+                    </div>
+                  </div>
+                </SortableContext>
+              </DndContext>
+              {hasImageAssets && (
+                <Text type="secondary" style={{ fontSize: 11, marginTop: 6, display: "block" }}>
+                  拖拽调整顺序
+                </Text>
+              )}
+            </Card>
+          )}
+
           <Card title="编辑器">
             <Form layout="vertical">
               <Form.Item label="标题" style={{ marginBottom: 16 }}>
@@ -992,7 +989,7 @@ export function XhsDraftsPage() {
           open={optimizeModalOpen}
           onCancel={() => { setOptimizeModalOpen(false); setOptimizeAssetId(null); setOptimizePrompt(""); setOptimizeRefImages([]); setOptimizeResult(null); }}
           footer={null}
-          width={600}
+          width={1024}
         >
           {(() => {
             const asset = sourceAssets.find((a) => a.id === optimizeAssetId);
@@ -1007,8 +1004,8 @@ export function XhsDraftsPage() {
                       {isImage ? (
                         <Image
                           src={asset.url || asset.local_path}
-                          width={180}
-                          height={180}
+                          width={320}
+                          height={320}
                           style={{ objectFit: "contain", borderRadius: 6 }}
                           referrerPolicy="no-referrer"
                           preview={{ mask: <EyeOutlined style={{ fontSize: 16 }} /> }}
@@ -1026,14 +1023,14 @@ export function XhsDraftsPage() {
                       {optimizeResult ? (
                         <Image
                           src={optimizeResult}
-                          width={180}
-                          height={180}
+                          width={320}
+                          height={320}
                           style={{ objectFit: "contain", borderRadius: 6 }}
                           referrerPolicy="no-referrer"
                           preview={{ mask: <EyeOutlined style={{ fontSize: 16 }} /> }}
                         />
                       ) : (
-                        <div style={{ width: 180, height: 180, margin: "0 auto", border: "1px dashed #434343", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ width: 320, height: 320, margin: "0 auto", border: "1px dashed #434343", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <Text type="secondary" style={{ fontSize: 12 }}>{isOptimizing ? "生成中..." : "等待生成"}</Text>
                         </div>
                       )}
@@ -1313,7 +1310,7 @@ export function XhsDraftsPage() {
             </Form.Item>
             <Form.Item label="每篇图片数">
               <InputNumber
-                min={3}
+                min={0}
                 max={5}
                 value={imagesPerDraft}
                 onChange={(v) => setImagesPerDraft(v ?? 0)}

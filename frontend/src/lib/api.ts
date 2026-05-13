@@ -899,9 +899,9 @@ export async function runAutoTask(taskId: number): Promise<AutoTaskRunResult> {
 
 export async function generateAgentDrafts(
   payload: AgentDraftPayload
-): Promise<AgentDraftBatchResult> {
+): Promise<Record<string, unknown>> {
   const res = await http.post<{
     choices: Array<{ message: { content: string } }>;
   }>("/ai/agent-drafts/chat/completions", payload);
-  return JSON.parse(res.data.choices[0].message.content) as AgentDraftBatchResult;
+  return JSON.parse(res.data.choices[0].message.content) as Record<string, unknown>;
 }

@@ -54,13 +54,17 @@ def _serialize_config(config: ModelConfig) -> dict:
 
 
 def _serialize_export_config(config: ModelConfig) -> dict:
+    try:
+        api_key = decrypt_text(config.encrypted_api_key) if config.encrypted_api_key else ""
+    except Exception:
+        api_key = ""
     return {
         "name": config.name,
         "model_type": config.model_type,
         "provider": config.provider,
         "model_name": config.model_name,
         "base_url": config.base_url,
-        "api_key": decrypt_text(config.encrypted_api_key) if config.encrypted_api_key else "",
+        "api_key": api_key,
         "is_default": config.is_default,
     }
 

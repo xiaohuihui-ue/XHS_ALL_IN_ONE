@@ -177,7 +177,7 @@ def _make_test_db(tmp_path):
 
 
 def _seed_user_and_models(session, with_image_model=True):
-    user = User(username="tester", password_hash="x")
+    user = User(username="tester", email="tester@test.com", password_hash="x")
     session.add(user)
     session.flush()
 
@@ -276,7 +276,7 @@ def test_agent_drafts_requires_auth():
 def test_agent_drafts_missing_text_model(tmp_path):
     engine, SessionLocal = _make_test_db(tmp_path)
     db = SessionLocal()
-    user = User(username="u2", password_hash="x")
+    user = User(username="u2", email="u2@test.com", password_hash="x")
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -360,3 +360,513 @@ def test_agent_drafts_missing_image_model_when_images_requested(tmp_path):
         assert "image model" in response.json()["detail"].lower()
     finally:
         _cleanup(engine, SessionLocal)
+
+
+# ---------------------------------------------------------------------------
+# Tests for enhanced draft titles (step=titles returns topics)
+# ---------------------------------------------------------------------------
+
+def test_generate_draft_titles_returns_topics():
+    """generate_draft_titles returns topics and recommended_topic fields."""
+    client = OpenAICompatibleTextClient()
+    cfg = _make_model_config()
+    messages = [{"role": "user", "content": "Generate breakfast drafts."}]
+
+    api_response = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "titles": ["标题1", "标题2", "标题3"],
+                    "topics": ["低卡早餐", "健康饮食", "减脂餐"],
+                })
+            }
+        }]
+    }
+    with patch("requests.post", return_value=_mock_response(api_response)):
+        result = client.generate_draft_titles(
+            model_config=cfg,
+            api_key="sk-test",
+            messages=messages,
+            n=3,
+            temperature=0.7,
+            top_p=1.0,
+        )
+    assert "titles" in result
+    assert "topics" in result
+    assert "recommended_title" in result
+    assert "recommended_topic" in result
+    assert result["titles"] == ["标题1", "标题2", "标题3"]
+    assert result["topics"] == ["低卡早餐", "健康饮食", "减脂餐"]
+    assert result["recommended_title"] == "标题1"
+    assert result["recommended_topic"] == "低卡早餐"
+
+
+def test_generate_single_draft_returns_12_layers():
+    """generate_single_draft returns cover_strategy, image_prompt_spec, and publish_tips."""
+    client = OpenAICompatibleTextClient()
+    cfg = _make_model_config()
+    messages = [{"role": "user", "content": "Generate a breakfast draft."}]
+
+    api_response = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "body": "早餐内容正文",
+                    "tags": ["早餐", "健康"],
+                    "cover_strategy": {
+                        "cover_goal": "吸引点击",
+                        "cover_type": "食物特写",
+                        "visual_core": "色彩鲜艳",
+                        "title_space": "上方30%",
+                        "text_in_image": False,
+                    },
+                    "image_prompt_spec": {
+                        "L1_publish_goal": "种草低卡早餐",
+                        "L2_topic": "低卡早餐",
+                        "L3_audience": "减肥人群",
+                        "L4_main_subject": "早餐碗",
+                        "L5_scene": "厨房台面",
+                        "L6_composition": "居中构图",
+                        "L7_style": "自然清新",
+                        "L8_color_lighting": "自然光",
+                        "L9_emotion": "治愈",
+                        "L10_details": "健康食材",
+                        "L11_platform_adaptation": "小红书封面",
+                        "L12_negative_constraints": "不要文字",
+                    },
+                    "publish_tips": "发布时间建议早上8点",
+                })
+            }
+        }]
+    }
+    with patch("requests.post", return_value=_mock_response(api_response)):
+        result = client.generate_single_draft(
+            model_config=cfg,
+            api_key="sk-test",
+            messages=messages,
+            title="低卡早餐",
+            temperature=0.7,
+            top_p=1.0,
+            output_requirements=None,
+        )
+    assert result["body"] == "早餐内容正文"
+    assert "cover_strategy" in result
+    assert result["cover_strategy"]["cover_type"] == "食物特写"
+    assert "image_prompt_spec" in result
+    assert result["image_prompt_spec"]["L1_publish_goal"] == "种草低卡早餐"
+    assert "publish_tips" in result
+
+
+# ---------------------------------------------------------------------------
+# Tests for iterate_image_prompt self-iteration
+# ---------------------------------------------------------------------------
+
+def test_iterate_image_prompt_converges_in_3_rounds():
+    """Prompt iteration converges within max_iterations rounds."""
+    client = OpenAICompatibleTextClient()
+    cfg = _make_model_config()
+
+    def score_response(score: float, need_rewrite: bool):
+        return {
+            "choices": [{
+                "message": {
+                    "content": json.dumps({
+                        "scores": {
+                            "theme_clarity": 5, "subject_clarity": 5,
+                            "composition_control": 5, "xiaohongshu_fit": 5,
+                            "style_consistency": 5, "negative_constraints": 5,
+                            "text_risk": 5,
+                        },
+                        "overall_score": score,
+                        "failed_items": [],
+                        "improvement_suggestions": [],
+                        "whether_need_rewrite": need_rewrite,
+                    })
+                }
+            }]
+        }
+
+    call_count = [0]
+    def mock_post(request, **kwargs):
+        call_count[0] += 1
+        url = request if isinstance(request, str) else request.url
+        if "chat/completions" in str(url):
+            body = request.json() if hasattr(request, "json") else {}
+            msgs = body.get("messages", [])
+            content = next((m["content"] for m in msgs if isinstance(m.get("content"), str) and "待质检" in m.get("content", "")), None)
+            if content:
+                return _mock_response(score_response(4.6, False))
+            return _mock_response({
+                "choices": [{"message": {"content": "a cozy healthy breakfast bowl, natural lighting, top view"}}]
+            })
+        return _mock_response({})
+
+    with patch("requests.post", side_effect=mock_post):
+        result = client.iterate_image_prompt(
+            model_config=cfg,
+            api_key="sk-test",
+            image_prompt_spec={
+                "L1_publish_goal": "种草",
+                "L2_topic": "早餐",
+                "L3_audience": "减肥",
+                "L4_main_subject": "碗",
+                "L5_scene": "厨房",
+                "L6_composition": "居中",
+                "L7_style": "清新",
+                "L8_color_lighting": "自然光",
+                "L9_emotion": "治愈",
+                "L10_details": "健康",
+                "L11_platform_adaptation": "小红书封面",
+                "L12_negative_constraints": "不要文字",
+            },
+            cover_strategy={"cover_goal": "吸引", "cover_type": "特写", "visual_core": "色彩", "title_space": "上方", "text_in_image": False},
+            draft_body="早餐很重要",
+            reference_image_urls=[],
+            max_iterations=3,
+            target_score=4.5,
+        )
+
+    assert "final_image_prompt" in result
+    assert "iteration_history" in result
+    assert result["total_rounds"] >= 1
+
+
+def test_iterate_image_prompt_respects_max_iterations():
+    """Iteration stops after max_iterations even if score is below target."""
+    client = OpenAICompatibleTextClient()
+    cfg = _make_model_config()
+
+    def mock_post(request, **kwargs):
+        url = request if isinstance(request, str) else getattr(request, "url", "")
+        body = request.json() if hasattr(request, "json") else {}
+        msgs = body.get("messages", [])
+        content = next((m.get("content", "") for m in msgs if "待质检" in str(m.get("content", ""))), None)
+        if content:
+            return _mock_response({
+                "choices": [{
+                    "message": {
+                        "content": json.dumps({
+                            "scores": {"theme_clarity": 2, "subject_clarity": 2, "composition_control": 2,
+                                        "xiaohongshu_fit": 2, "style_consistency": 2, "negative_constraints": 2, "text_risk": 3},
+                            "overall_score": 2.5,
+                            "failed_items": ["构图不清", "主题模糊"],
+                            "improvement_suggestions": ["明确构图", "聚焦主题"],
+                            "whether_need_rewrite": True,
+                        })
+                    }
+                }]
+            })
+        prompt_content = next((m.get("content", "") for m in msgs if isinstance(m.get("content"), str) and "生图提示词" in str(m.get("content", ""))), None)
+        if prompt_content:
+            return _mock_response({
+                "choices": [{"message": {"content": "breakfast bowl photo"}}]
+            })
+        rewrite_content = next((m.get("content", "") for m in msgs if isinstance(m.get("content"), str) and "原始提示词" in str(m.get("content", ""))), None)
+        if rewrite_content:
+            return _mock_response({
+                "choices": [{"message": {"content": "improved breakfast bowl photo, centered, natural light"}}]
+            })
+        return _mock_response({"choices": [{"message": {"content": "prompt"}}]})
+
+    with patch("requests.post", side_effect=mock_post):
+        result = client.iterate_image_prompt(
+            model_config=cfg,
+            api_key="sk-test",
+            image_prompt_spec={
+                "L1_publish_goal": "", "L2_topic": "", "L3_audience": "",
+                "L4_main_subject": "", "L5_scene": "", "L6_composition": "",
+                "L7_style": "", "L8_color_lighting": "", "L9_emotion": "",
+                "L10_details": "", "L11_platform_adaptation": "", "L12_negative_constraints": "",
+            },
+            cover_strategy={"cover_goal": "", "cover_type": "", "visual_core": "", "title_space": "", "text_in_image": False},
+            draft_body="",
+            reference_image_urls=[],
+            max_iterations=3,
+            target_score=4.5,
+        )
+
+    # Should stop at max 3 rounds
+    assert result["total_rounds"] <= 3
+    assert len(result["iteration_history"]) <= 3
+
+
+def test_iterate_image_prompt_fallback_without_model_config():
+    """iterate_image_prompt returns fallback prompt when model config is incomplete."""
+    client = OpenAICompatibleTextClient()
+    cfg = ModelConfig()
+    cfg.base_url = ""
+    cfg.model_name = ""
+
+    result = client.iterate_image_prompt(
+        model_config=cfg,
+        api_key="",
+        image_prompt_spec={
+            "L1_publish_goal": "种草",
+            "L2_topic": "早餐",
+            "L3_audience": "减肥",
+            "L4_main_subject": "碗",
+            "L5_scene": "厨房",
+            "L6_composition": "居中",
+            "L7_style": "清新",
+            "L8_color_lighting": "自然光",
+            "L9_emotion": "治愈",
+            "L10_details": "健康",
+            "L11_platform_adaptation": "小红书封面",
+            "L12_negative_constraints": "不要文字",
+        },
+        cover_strategy={},
+        draft_body="早餐内容",
+        reference_image_urls=[],
+        max_iterations=3,
+        target_score=4.5,
+    )
+
+    assert "final_image_prompt" in result
+    assert result["total_rounds"] == 0
+    assert result["iteration_history"] == []
+
+
+# ---------------------------------------------------------------------------
+# Tests for _check_generated_image_quality
+# ---------------------------------------------------------------------------
+
+def test_check_generated_image_quality_returns_structured_result():
+    """_check_generated_image_quality returns ImageQualityCheck structure."""
+    from backend.app.services.ai_service import OpenAICompatibleImageClient
+    client = OpenAICompatibleImageClient()
+
+    quality_response = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "is_relevant_to_topic": True,
+                    "has_text_or_garbled_text": False,
+                    "has_logo_or_watermark": False,
+                    "has_qrcode": False,
+                    "has_sensitive_content": False,
+                    "has_deformed_face_or_hands": False,
+                    "is_xiaohongshu_cover_ready": True,
+                    "has_title_space": True,
+                    "need_retry": False,
+                    "retry_reason": "",
+                })
+            }
+        }]
+    }
+
+    cfg = _make_model_config()
+    with patch("requests.post", return_value=_mock_response(quality_response)):
+        result = client._check_generated_image_quality(
+            image_url="https://example.com/img.png",
+            topic="低卡早餐",
+            text_model_config=cfg,
+            text_api_key="sk-test",
+        )
+
+    assert result["need_retry"] is False
+    assert result["has_text_or_garbled_text"] is False
+    assert result["is_xiaohongshu_cover_ready"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests for generate_image_with_retry
+# ---------------------------------------------------------------------------
+
+def test_generate_image_with_retry_skips_retry_when_pass():
+    """Image quality check pass → no retry, url returned directly."""
+    from backend.app.services.ai_service import OpenAICompatibleImageClient
+    client = OpenAICompatibleImageClient()
+
+    img_cfg = _make_model_config(base_url="http://fake-img", model_name="dall-e")
+    txt_cfg = _make_model_config(base_url="http://fake-llm", model_name="gpt-vision")
+
+    quality_pass = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "is_relevant_to_topic": True,
+                    "has_text_or_garbled_text": False,
+                    "has_logo_or_watermark": False,
+                    "has_qrcode": False,
+                    "has_sensitive_content": False,
+                    "has_deformed_face_or_hands": False,
+                    "is_xiaohongshu_cover_ready": True,
+                    "has_title_space": True,
+                    "need_retry": False,
+                    "retry_reason": "",
+                })
+            }
+        }]
+    }
+
+    img_response = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "data": [{"url": "https://cdn.example.com/breakfast.png"}]
+                })
+            }
+        }]
+    }
+
+    call_count = [0]
+    def mock_post(request, **kwargs):
+        call_count[0] += 1
+        url = str(getattr(request, "url", request)) if hasattr(request, "url") else str(request)
+        if "images/generations" in url:
+            return _mock_response({"data": [{"url": "https://cdn.example.com/breakfast.png"}]})
+        return _mock_response(quality_pass)
+
+    with patch("requests.post", side_effect=mock_post):
+        result = client.generate_image_with_retry(
+            prompt="healthy breakfast bowl",
+            reference_images=None,
+            image_model_config=img_cfg,
+            image_api_key="sk-img",
+            text_model_config=txt_cfg,
+            text_api_key="sk-txt",
+            topic="低卡早餐",
+            max_retries=2,
+        )
+
+    assert result["url"] == "https://cdn.example.com/breakfast.png"
+    assert result["quality_check"]["need_retry"] is False
+    assert len(result["iteration_history"]) == 1
+
+
+def test_generate_image_with_retry_retries_on_failure():
+    """Image quality check fail → retry, correction applied."""
+    from backend.app.services.ai_service import OpenAICompatibleImageClient
+    client = OpenAICompatibleImageClient()
+
+    img_cfg = _make_model_config(base_url="http://fake-img", model_name="dall-e")
+    txt_cfg = _make_model_config(base_url="http://fake-llm", model_name="gpt-vision")
+
+    quality_fail = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "is_relevant_to_topic": True,
+                    "has_text_or_garbled_text": True,
+                    "has_logo_or_watermark": False,
+                    "has_qrcode": False,
+                    "has_sensitive_content": False,
+                    "has_deformed_face_or_hands": False,
+                    "is_xiaohongshu_cover_ready": False,
+                    "has_title_space": False,
+                    "need_retry": True,
+                    "retry_reason": "has_text_or_garbled_text",
+                })
+            }
+        }]
+    }
+    quality_pass = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "is_relevant_to_topic": True,
+                    "has_text_or_garbled_text": False,
+                    "has_logo_or_watermark": False,
+                    "has_qrcode": False,
+                    "has_sensitive_content": False,
+                    "has_deformed_face_or_hands": False,
+                    "is_xiaohongshu_cover_ready": True,
+                    "has_title_space": True,
+                    "need_retry": False,
+                    "retry_reason": "",
+                })
+            }
+        }]
+    }
+
+    call_count = [0]
+    def mock_post(request, **kwargs):
+        call_count[0] += 1
+        url = str(getattr(request, "url", request)) if hasattr(request, "url") else str(request)
+        if "images/generations" in url:
+            return _mock_response({"data": [{"url": f"https://cdn.example.com/img_{call_count[0]}.png"}]})
+        return _mock_response(quality_pass if call_count[0] > 2 else quality_fail)
+
+    with patch("requests.post", side_effect=mock_post):
+        result = client.generate_image_with_retry(
+            prompt="healthy breakfast bowl",
+            reference_images=None,
+            image_model_config=img_cfg,
+            image_api_key="sk-img",
+            text_model_config=txt_cfg,
+            text_api_key="sk-txt",
+            topic="低卡早餐",
+            max_retries=2,
+        )
+
+    assert result["url"] != ""
+    assert len(result["iteration_history"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# API-level tests for step-mode enhancements
+# ---------------------------------------------------------------------------
+
+def test_step_titles_returns_topics(tmp_path):
+    """step=titles API response includes topics and recommended_topic."""
+    text_client = MagicMock()
+    text_client.generate_draft_titles.return_value = {
+        "titles": ["标题1", "标题2"],
+        "recommended_title": "标题1",
+        "topics": ["主题A", "主题B"],
+        "recommended_topic": "主题A",
+    }
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=False, text_client=text_client
+    )
+    try:
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json={
+            "messages": [{"role": "user", "content": "generate"}],
+            "n": 2,
+            "step": "titles",
+            "metadata": {"platform": "xhs"},
+            "image_options": {"n": 0},
+        })
+        assert response.status_code == 200
+        content = json.loads(response.json()["choices"][0]["message"]["content"])
+        assert "topics" in content
+        assert "recommended_topic" in content
+        assert content["topics"] == ["主题A", "主题B"]
+        assert content["recommended_topic"] == "主题A"
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
+def test_step_draft_returns_cover_strategy_and_publish_tips(tmp_path):
+    """step=draft API response includes cover_strategy, image_prompt_spec, publish_tips."""
+    text_client = MagicMock()
+    text_client.generate_single_draft.return_value = {
+        "title": "测试标题",
+        "body": "正文内容",
+        "tags": ["标签1"],
+        "cover_strategy": {"cover_goal": "吸引点击", "cover_type": "特写", "visual_core": "色彩", "title_space": "上方", "text_in_image": False},
+        "image_prompt_spec": {"L1_publish_goal": "种草", "L2_topic": "测试", "L3_audience": "", "L4_main_subject": "", "L5_scene": "", "L6_composition": "", "L7_style": "", "L8_color_lighting": "", "L9_emotion": "", "L10_details": "", "L11_platform_adaptation": "", "L12_negative_constraints": ""},
+        "publish_tips": "建议早上9点发布",
+    }
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=False, text_client=text_client
+    )
+    try:
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json={
+            "messages": [{"role": "user", "content": "generate"}],
+            "step": "draft",
+            "selected_title": "测试标题",
+            "metadata": {"platform": "xhs"},
+            "image_options": {"n": 0},
+        })
+        assert response.status_code == 200
+        content = json.loads(response.json()["choices"][0]["message"]["content"])
+        assert "cover_strategy" in content
+        assert "image_prompt_spec" in content
+        assert "publish_tips" in content
+        assert content["cover_strategy"]["cover_type"] == "特写"
+    finally:
+        _cleanup(engine, SessionLocal)
+

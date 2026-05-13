@@ -1,152 +1,50 @@
 import {
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
+  CloseOutlined,
   LoadingOutlined,
+  PaperClipOutlined,
   PictureOutlined,
-  RobotOutlined,
   SendOutlined,
 } from "@ant-design/icons";
 import {
-  Alert,
-  Badge,
   Button,
-  Card,
-  Col,
-  Form,
-  Image,
-  Input,
   InputNumber,
-  Row,
   Space,
-  Spin,
-  Tag,
+  Tooltip,
   Typography,
+  Upload,
 } from "antd";
+import type { UploadFile } from "antd";
+import TextArea from "antd/es/input/TextArea";
 import { useState } from "react";
 
+import { DraftStepCard } from "../../../components/ai/draft-step-card";
 import { PageHeader } from "../../../components/layout/app-shell";
-import { generateAgentDrafts } from "../../../lib/api";
-import type { AgentDraftBatchResult, AgentDraftItem } from "../../../types";
+import { useDraftGeneration } from "../../../hooks/use-draft-generation";
 
-const { TextArea } = Input;
-const { Text, Paragraph } = Typography;
-
-function DraftResultCard({ item }: { item: AgentDraftItem }) {
-  const statusIcon =
-    item.status === "completed" ? (
-      <CheckCircleOutlined style={{ color: "#52c41a" }} />
-    ) : item.status === "partial" ? (
-      <ExclamationCircleOutlined style={{ color: "#faad14" }} />
-    ) : (
-      <ExclamationCircleOutlined style={{ color: "#ff4d4f" }} />
-    );
-
-  return (
-    <Card
-      size="small"
-      title={
-        <Space>
-          {statusIcon}
-          <Text strong style={{ fontSize: 13 }}>
-            {item.draft.title || "（无标题）"}
-          </Text>
-          <Badge
-            count={`草稿 #${item.draft.id}`}
-            style={{ background: "#1668dc", fontSize: 11 }}
-          />
-        </Space>
-      }
-      style={{ marginBottom: 12 }}
-    >
-      <Paragraph
-        ellipsis={{ rows: 3, expandable: true, symbol: "展开" }}
-        style={{ fontSize: 12, color: "rgba(255,255,255,0.75)" }}
-      >
-        {item.draft.body}
-      </Paragraph>
-      {item.draft.tags.length > 0 && (
-        <Space wrap style={{ marginBottom: 8 }}>
-          {item.draft.tags.map((t) => (
-            <Tag key={t.name} color="blue" style={{ fontSize: 11 }}>
-              #{t.name}
-            </Tag>
-          ))}
-        </Space>
-      )}
-      {item.assets.length > 0 && (
-        <Image.PreviewGroup>
-          <Space wrap>
-            {item.assets.map((a) => (
-              <Image
-                key={a.id}
-                src={a.url}
-                width={80}
-                height={80}
-                style={{ objectFit: "cover", borderRadius: 4 }}
-                placeholder={
-                  <Spin
-                    indicator={<LoadingOutlined />}
-                    style={{ lineHeight: "80px" }}
-                  />
-                }
-              />
-            ))}
-          </Space>
-        </Image.PreviewGroup>
-      )}
-      {item.errors.length > 0 && (
-        <Alert
-          type="warning"
-          style={{ marginTop: 8, fontSize: 11 }}
-          message={item.errors.join("; ")}
-          showIcon
-        />
-      )}
-    </Card>
-  );
-}
+const { Text } = Typography;
 
 export function XhsAgentDraftsPage() {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AgentDraftBatchResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [request, setRequest] = useState("");
+  const [draftCount, setDraftCount] = useState(3);
+  const [imagesPerDraft, setImagesPerDraft] = useState(1);
+  const [refImages, setRefImages] = useState<UploadFile[]>([]);
 
-  const [form] = Form.useForm<{
-    request: string;
-    n: number;
-    images_per_draft: number;
-    output_requirements: string;
-  }>();
+  const { steps, running, run, stop } = useDraftGeneration();
 
-  const handleGenerate = async () => {
-    const values = await form.validateFields();
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await generateAgentDrafts({
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a Xiaohongshu content strategist and visual prompt engineer. Generate publish-ready XHS draft candidates.",
-          },
-          { role: "user", content: values.request },
-        ],
-        n: values.n,
-        metadata: {
-          platform: "xhs",
-          output_requirements: values.output_requirements || undefined,
-        },
-        image_options: { n: values.images_per_draft },
-      });
-      setResult(res);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+  const handleGenerate = () => {
+    if (!request.trim()) return;
+    void run({ mode: "generate", request, refImages, draftCount, imagesPerDraft });
+  };
+
+  const addRefImage = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setRefImages((prev) => [
+        ...prev,
+        { uid: `${Date.now()}-${file.name}`, name: file.name, originFileObj: file, thumbUrl: e.target?.result as string } as UploadFile,
+      ]);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -154,92 +52,116 @@ export function XhsAgentDraftsPage() {
       <PageHeader
         eyebrow="XHS · AI"
         title="Agent 草稿生成"
-        description="描述内容需求，一次生成多篇可发布的小红书草稿及配套图片。"
+        description="描述内容需求，生成多篇小红书草稿及配套图片。"
       />
 
-      <Row gutter={24}>
-        <Col xs={24} lg={10}>
-          <Card title="生成设置" size="small" style={{ marginBottom: 16 }}>
-            <Form
-              form={form}
-              layout="vertical"
-              initialValues={{ n: 3, images_per_draft: 1, request: "", output_requirements: "" }}
-            >
-              <Form.Item
-                name="request"
-                label="内容需求"
-                rules={[{ required: true, message: "请描述内容需求" }]}
-              >
-                <TextArea
-                  rows={5}
-                  placeholder="例如：生成3篇低卡早餐种草笔记，受众是减脂人群，语气自然亲切，附带图片提示词。"
-                  maxLength={2000}
-                  showCount
-                />
-              </Form.Item>
-              <Row gutter={12}>
-                <Col span={12}>
-                  <Form.Item name="n" label="草稿数量">
-                    <InputNumber min={1} max={10} style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="images_per_draft" label="每篇图片数">
-                    <InputNumber min={0} max={3} style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item name="output_requirements" label="输出要求（可选）">
-                <Input placeholder="例如：每篇必须包含3个标签，突出卖点" maxLength={500} />
-              </Form.Item>
-              <Form.Item>
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  loading={loading}
-                  onClick={() => void handleGenerate()}
-                  block
-                >
-                  开始生成
-                </Button>
-              </Form.Item>
-            </Form>
-          </Card>
-        </Col>
+      {/* Workflow steps area */}
+      <div style={{ minHeight: "calc(100vh - 420px)", marginBottom: 16 }}>
+        {steps.length === 0 && !running && (
+          <div style={{ textAlign: "center", padding: "64px 0", color: "rgba(255,255,255,0.18)" }}>
+            <PictureOutlined style={{ fontSize: 40, display: "block", marginBottom: 10 }} />
+            <Text type="secondary" style={{ fontSize: 13 }}>在下方输入需求，点击发送开始生成</Text>
+          </div>
+        )}
+        {steps.map((step, i) => <DraftStepCard key={i} step={step} />)}
+      </div>
 
-        <Col xs={24} lg={14}>
-          {loading && (
-            <div style={{ textAlign: "center", padding: "48px 0" }}>
-              <Spin
-                indicator={<LoadingOutlined style={{ fontSize: 32 }} />}
-                tip="正在生成草稿…"
+      {/* Input area */}
+      <div style={{ position: "sticky", bottom: 0, background: "var(--color-background-primary, #141414)", paddingTop: 8, paddingBottom: 4 }}>
+        {/* Reference images row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+          <Upload
+            accept="image/*"
+            showUploadList={false}
+            multiple
+            beforeUpload={(file) => { addRefImage(file); return false; }}
+          >
+            <Tooltip title="附加参考图给 AI 生图使用">
+              <Button
+                icon={<PaperClipOutlined />}
+                size="small"
+                type={refImages.length > 0 ? "primary" : "default"}
+                ghost={refImages.length > 0}
+              >
+                参考图{refImages.length > 0 ? `（${refImages.length}）` : ""}
+              </Button>
+            </Tooltip>
+          </Upload>
+          {refImages.map((f) => (
+            <div key={f.uid} style={{ position: "relative", display: "inline-flex" }}>
+              <img
+                src={f.thumbUrl ?? ""}
+                alt={f.name}
+                width={40}
+                height={40}
+                style={{ objectFit: "cover", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)" }}
+              />
+              <Button
+                size="small"
+                type="text"
+                icon={<CloseOutlined style={{ fontSize: 10 }} />}
+                onClick={() => setRefImages((p) => p.filter((x) => x.uid !== f.uid))}
+                style={{
+                  position: "absolute", top: -5, right: -5,
+                  width: 16, height: 16, minWidth: 0, padding: 0,
+                  background: "rgba(0,0,0,0.7)", borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
               />
             </div>
-          )}
-          {error && (
-            <Alert type="error" message="生成失败" description={error} showIcon style={{ marginBottom: 16 }} />
-          )}
-          {result && !loading && (
-            <>
-              <Space style={{ marginBottom: 12 }}>
-                <RobotOutlined />
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  生成完成：{result.created_count} 篇草稿，{result.failed_count} 篇失败
-                </Text>
+          ))}
+        </div>
+
+        {/* Input box */}
+        <div style={{
+          border: "1px solid rgba(255,255,255,0.15)",
+          borderRadius: 12,
+          padding: "10px 14px",
+          background: "rgba(255,255,255,0.04)",
+        }}>
+          <TextArea
+            value={request}
+            onChange={(e) => setRequest(e.target.value)}
+            placeholder="描述内容需求，例如：生成3篇低卡早餐种草笔记，受众是减脂人群，语气自然亲切…"
+            autoSize={{ minRows: 2, maxRows: 6 }}
+            variant="borderless"
+            style={{ padding: 0, fontSize: 14, resize: "none" }}
+            onPressEnter={(e) => { if (!e.shiftKey) { e.preventDefault(); handleGenerate(); } }}
+          />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+            <Space size={8} wrap>
+              <Space size={4}>
+                <Text type="secondary" style={{ fontSize: 12 }}>草稿数</Text>
+                <InputNumber
+                  min={1} max={10} value={draftCount}
+                  onChange={(v) => setDraftCount(v ?? 3)}
+                  size="small" style={{ width: 56 }}
+                />
               </Space>
-              {result.items.map((item, i) => (
-                <DraftResultCard key={item.draft.id ?? i} item={item} />
-              ))}
-            </>
-          )}
-          {!loading && !error && !result && (
-            <div style={{ textAlign: "center", padding: "64px 0", color: "rgba(255,255,255,0.25)" }}>
-              <PictureOutlined style={{ fontSize: 40, marginBottom: 12, display: "block" }} />
-              <Text type="secondary">填写左侧设置后点击「开始生成」</Text>
-            </div>
-          )}
-        </Col>
-      </Row>
+              <Space size={4}>
+                <Text type="secondary" style={{ fontSize: 12 }}>每篇图片</Text>
+                <InputNumber
+                  min={0} max={3} value={imagesPerDraft}
+                  onChange={(v) => setImagesPerDraft(v ?? 1)}
+                  size="small" style={{ width: 56 }}
+                />
+              </Space>
+            </Space>
+            <Space>
+              {running && (
+                <Button size="small" danger onClick={stop}>停止</Button>
+              )}
+              <Button
+                type="primary"
+                icon={running ? <LoadingOutlined /> : <SendOutlined />}
+                disabled={running || !request.trim()}
+                onClick={handleGenerate}
+                shape="circle"
+              />
+            </Space>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

@@ -191,8 +191,10 @@ export function ModelConfigPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
       setMessage(`已导出 ${backup.configs.length} 个模型配置。JSON 包含 API Key，请妥善保管。`);
-    } catch {
-      setError("模型配置导出失败。");
+    } catch (err) {
+      console.error("Export failed:", err);
+      const errorMsg = err instanceof Error ? err.message : "未知错误";
+      setError(`模型配置导出失败：${errorMsg}`);
     } finally {
       setIsExporting(false);
     }

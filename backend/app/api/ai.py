@@ -108,6 +108,16 @@ class AgentDraftsChatRequest(BaseModel):
     metadata: _AgentMetadata | None = None
     image_options: _ImageOptions = Field(default_factory=_ImageOptions)
     user: str | None = None
+    # step-mode fields
+    step: Literal["titles", "draft", "images"] | None = None
+    selected_title: str | None = None  # used when step="draft"
+    draft_id: int | None = None        # used when step="images"
+    image_prompt: str | None = None    # used when step="images" (legacy)
+    # step=images fields (preferred over image_prompt)
+    cover_strategy: dict[str, Any] | None = None
+    image_prompt_spec: dict[str, Any] | None = None
+    draft_body: str | None = None
+    reference_image_urls: list[str] | None = None
 
 
 def get_text_ai_client() -> TextAiClient:
@@ -535,6 +545,17 @@ def _extract_message_parts(messages: list[_AgentMessage]) -> tuple[list[dict], l
     return plain, ref_urls
 
 
+def _agent_drafts_response(task_id: int, model: str | None, result: dict) -> dict:
+    return {
+        "id": f"chatcmpl_xhs_agent_drafts_{task_id}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model or "default",
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": json.dumps(result, ensure_ascii=False)}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None},
+    }
+
+
 @router.post("/agent-drafts/chat/completions")
 def agent_drafts_chat_completions(
     payload: AgentDraftsChatRequest,
@@ -543,54 +564,195 @@ def agent_drafts_chat_completions(
     text_ai_client: TextAiClient = Depends(get_text_ai_client),
     image_ai_client: ImageAiClient = Depends(get_image_ai_client),
 ):
-    text_model_config, text_api_key = _text_model_context(db, current_user)
+    plain_messages, ref_urls = _extract_message_parts(payload.messages)
+    output_requirements = payload.metadata.output_requirements if payload.metadata else None
 
+    # --- step=titles: generate title candidates and topics ---
+    if payload.step == "titles":
+        text_model_config, text_api_key = _text_model_context(db, current_user)
+        try:
+            titles_result = text_ai_client.generate_draft_titles(
+                model_config=text_model_config,
+                api_key=text_api_key,
+                messages=plain_messages,
+                n=payload.n,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Title generation failed: {exc}") from exc
+        task = Task(user_id=current_user.id, platform="xhs", task_type="ai_agent_drafts_titles", status="completed", progress=100, payload={"titles": titles_result.get("titles", []), "topics": titles_result.get("topics", [])})
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return _agent_drafts_response(task.id, payload.model, {
+            "titles": titles_result.get("titles", []),
+            "recommended_title": titles_result.get("recommended_title", ""),
+            "topics": titles_result.get("topics", []),
+            "recommended_topic": titles_result.get("recommended_topic", ""),
+        })
+
+    # --- step=draft: generate single draft (body + tags + cover_strategy + image_prompt_spec + publish_tips) ---
+    if payload.step == "draft":
+        if not payload.selected_title:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="selected_title is required for step=draft")
+        text_model_config, text_api_key = _text_model_context(db, current_user)
+        try:
+            draft_data = text_ai_client.generate_single_draft(
+                model_config=text_model_config,
+                api_key=text_api_key,
+                messages=plain_messages,
+                title=payload.selected_title,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                output_requirements=output_requirements,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Draft generation failed: {exc}") from exc
+
+        raw_tags = draft_data.get("tags") or []
+        draft = AiDraft(
+            user_id=current_user.id,
+            platform="xhs",
+            title=draft_data.get("title") or payload.selected_title,
+            body=draft_data.get("body") or "",
+            tags=[{"name": t} for t in raw_tags],
+        )
+        db.add(draft)
+        db.flush()
+        task = Task(user_id=current_user.id, platform="xhs", task_type="ai_agent_drafts_draft", status="completed", progress=100, payload={"draft_id": draft.id})
+        db.add(task)
+        db.commit()
+        db.refresh(draft)
+        db.refresh(task)
+        return _agent_drafts_response(task.id, payload.model, {
+            "draft": _serialize_draft(draft),
+            "cover_strategy": draft_data.get("cover_strategy") or {},
+            "image_prompt_spec": draft_data.get("image_prompt_spec") or {},
+            "publish_tips": draft_data.get("publish_tips") or "",
+        })
+
+    # --- step=images: generate images with self-iteration and quality check ---
+    if payload.step == "images":
+        if not payload.draft_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="draft_id is required for step=images")
+        draft = db.get(AiDraft, payload.draft_id)
+        if draft is None or draft.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found")
+
+        image_model_config, image_api_key = _image_model_context(db, current_user)
+        text_model_config, text_api_key = _text_model_context(db, current_user)
+
+        # Resolve reference image URLs: prefer explicit list, fall back to extracted from messages
+        ref_image_urls: list[str] = list(payload.reference_image_urls or []) or ref_urls
+        images_per_draft = payload.image_options.n
+        draft_body = payload.draft_body or draft.body or ""
+        topic = draft.title or ""
+
+        item_assets: list[dict] = []
+        item_errors: list[str] = []
+        iteration_history_all: list[dict] = []
+        quality_check_all: list[dict] = []
+
+        for img_idx in range(images_per_draft):
+            try:
+                final_image_prompt = payload.image_prompt or draft.title or ""
+                iteration_history: list[dict] = []
+
+                # Use new iteration flow if cover_strategy and image_prompt_spec are available
+                if payload.cover_strategy and payload.image_prompt_spec:
+                    try:
+                        iter_result = text_ai_client.iterate_image_prompt(
+                            model_config=text_model_config,
+                            api_key=text_api_key,
+                            image_prompt_spec=payload.image_prompt_spec,
+                            cover_strategy=payload.cover_strategy,
+                            draft_body=draft_body,
+                            reference_image_urls=ref_image_urls,
+                            max_iterations=3,
+                            target_score=4.5,
+                        )
+                        final_image_prompt = iter_result.get("final_image_prompt", final_image_prompt)
+                        iteration_history = iter_result.get("iteration_history", [])
+                    except Exception as exc:
+                        item_errors.append(f"Image prompt iteration failed, using fallback: {exc}")
+
+                # Generate image with quality check and retry
+                img_retry_result = image_ai_client.generate_image_with_retry(
+                    prompt=final_image_prompt,
+                    reference_images=ref_image_urls if ref_image_urls else None,
+                    image_model_config=image_model_config,
+                    image_api_key=image_api_key,
+                    text_model_config=text_model_config,
+                    text_api_key=text_api_key,
+                    topic=topic,
+                    max_retries=2,
+                )
+                image_url = img_retry_result.get("url") or ""
+
+                gen_asset = AiGeneratedAsset(
+                    user_id=current_user.id,
+                    draft_id=draft.id,
+                    prompt=final_image_prompt,
+                    model_name=image_model_config.model_name,
+                    params={"size": payload.image_options.size, "style": payload.image_options.style},
+                    file_path="",
+                )
+                db.add(gen_asset)
+                db.flush()
+                draft_asset = DraftAsset(draft_id=draft.id, asset_type="image", url=image_url, local_path="", sort_order=img_idx)
+                db.add(draft_asset)
+                db.flush()
+                item_assets.append({"id": draft_asset.id, "draft_id": draft.id, "asset_type": "image", "url": image_url, "local_path": "", "sort_order": img_idx})
+
+                # Aggregate per-image iteration and quality check data
+                iteration_history_all.extend(iteration_history)
+                img_retry_history = img_retry_result.get("iteration_history", []) or []
+                for r in img_retry_history:
+                    iteration_history_all.append(r)
+                quality_check_all.append(img_retry_result.get("quality_check") or {})
+            except Exception as exc:
+                item_errors.append(f"Image generation failed: {exc}")
+
+        task = Task(user_id=current_user.id, platform="xhs", task_type="ai_agent_drafts_images", status="completed", progress=100, payload={"draft_id": draft.id, "asset_count": len(item_assets)})
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return _agent_drafts_response(task.id, payload.model, {
+            "assets": item_assets,
+            "iteration_history": iteration_history_all,
+            "quality_check": quality_check_all[0] if quality_check_all else {},
+            "errors": item_errors,
+        })
+
+    # --- legacy: no step, full batch generation ---
+    text_model_config, text_api_key = _text_model_context(db, current_user)
     images_per_draft = payload.image_options.n
     image_model_config = None
     image_api_key = ""
     if images_per_draft > 0:
         image_model_config, image_api_key = _image_model_context(db, current_user)
 
-    plain_messages, ref_urls = _extract_message_parts(payload.messages)
-    output_requirements = payload.metadata.output_requirements if payload.metadata else None
-
     task = Task(
-        user_id=current_user.id,
-        platform="xhs",
-        task_type="ai_agent_drafts_generate",
-        status="running",
-        progress=10,
-        payload={
-            "n": payload.n,
-            "images_per_draft": images_per_draft,
-            "reference_image_count": len(ref_urls),
-            "items": [],
-        },
+        user_id=current_user.id, platform="xhs", task_type="ai_agent_drafts_generate",
+        status="running", progress=10,
+        payload={"n": payload.n, "images_per_draft": images_per_draft, "reference_image_count": len(ref_urls), "items": []},
     )
     db.add(task)
     db.flush()
 
     try:
         structured = text_ai_client.generate_agent_drafts(
-            model_config=text_model_config,
-            api_key=text_api_key,
-            messages=plain_messages,
-            n=payload.n,
-            temperature=payload.temperature,
-            top_p=payload.top_p,
-            output_requirements=output_requirements,
-            reference_image_urls=ref_urls,
+            model_config=text_model_config, api_key=text_api_key, messages=plain_messages,
+            n=payload.n, temperature=payload.temperature, top_p=payload.top_p,
+            output_requirements=output_requirements, reference_image_urls=ref_urls,
         )
     except ValueError as exc:
-        task.status = "failed"
-        task.progress = 100
-        task.payload = {**(task.payload or {}), "error": str(exc)}
+        task.status = "failed"; task.progress = 100; task.payload = {**(task.payload or {}), "error": str(exc)}
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
-        task.status = "failed"
-        task.progress = 100
-        task.payload = {**(task.payload or {}), "error": str(exc)}
+        task.status = "failed"; task.progress = 100; task.payload = {**(task.payload or {}), "error": str(exc)}
         db.commit()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI text generation failed: {exc}") from exc
 
@@ -600,114 +762,36 @@ def agent_drafts_chat_completions(
     failed_count = 0
 
     for idx, draft_data in enumerate(structured.get("drafts", [])):
-        raw_tags: list[str] = draft_data.get("tags") or []
-        stored_tags = [{"name": t} for t in raw_tags]
+        raw_tags2: list[str] = draft_data.get("tags") or []
         image_prompt_data: dict = draft_data.get("image_prompt") or {}
-
-        draft = AiDraft(
-            user_id=current_user.id,
-            platform="xhs",
-            title=draft_data.get("title") or "",
-            body=draft_data.get("body") or "",
-            tags=stored_tags,
-        )
+        draft = AiDraft(user_id=current_user.id, platform="xhs", title=draft_data.get("title") or "", body=draft_data.get("body") or "", tags=[{"name": t} for t in raw_tags2])
         db.add(draft)
         db.flush()
         created_count += 1
-
-        item_assets: list[dict] = []
-        item_errors: list[str] = []
-        asset_ids: list[int] = []
-
+        item_assets2: list[dict] = []
+        item_errors2: list[str] = []
         if images_per_draft > 0 and image_model_config is not None:
-            positive_prompt = image_prompt_data.get("positive_prompt") or draft_data.get("title") or ""
+            positive_prompt2 = image_prompt_data.get("positive_prompt") or draft_data.get("title") or ""
             for img_idx in range(images_per_draft):
                 try:
-                    img_result = image_ai_client.generate_image(
-                        model_config=image_model_config,
-                        api_key=image_api_key,
-                        prompt=positive_prompt,
-                        reference_images=ref_urls if ref_urls else None,
-                    )
+                    img_result = image_ai_client.generate_image(model_config=image_model_config, api_key=image_api_key, prompt=positive_prompt2, reference_images=ref_urls if ref_urls else None)
                     image_url = img_result.get("url") or ""
-                    gen_asset = AiGeneratedAsset(
-                        user_id=current_user.id,
-                        draft_id=draft.id,
-                        prompt=positive_prompt,
-                        model_name=image_model_config.model_name,
-                        params={"size": payload.image_options.size, "style": payload.image_options.style},
-                        file_path="",
-                    )
-                    db.add(gen_asset)
-                    db.flush()
-                    draft_asset = DraftAsset(
-                        draft_id=draft.id,
-                        asset_type="image",
-                        url=image_url,
-                        local_path="",
-                        sort_order=img_idx,
-                    )
-                    db.add(draft_asset)
-                    db.flush()
-                    asset_ids.append(draft_asset.id)
-                    item_assets.append({
-                        "id": draft_asset.id,
-                        "draft_id": draft.id,
-                        "asset_type": "image",
-                        "url": image_url,
-                        "local_path": "",
-                        "sort_order": img_idx,
-                    })
+                    gen_asset = AiGeneratedAsset(user_id=current_user.id, draft_id=draft.id, prompt=positive_prompt2, model_name=image_model_config.model_name, params={"size": payload.image_options.size, "style": payload.image_options.style}, file_path="")
+                    db.add(gen_asset); db.flush()
+                    draft_asset = DraftAsset(draft_id=draft.id, asset_type="image", url=image_url, local_path="", sort_order=img_idx)
+                    db.add(draft_asset); db.flush()
+                    item_assets2.append({"id": draft_asset.id, "draft_id": draft.id, "asset_type": "image", "url": image_url, "local_path": "", "sort_order": img_idx})
                 except Exception as exc:
-                    item_errors.append(f"Image generation failed: {exc}")
+                    item_errors2.append(f"Image generation failed: {exc}")
+        item_status = "completed" if not item_errors2 else "partial"
+        result_items.append({"draft": _serialize_draft(draft), "image_prompt": image_prompt_data, "assets": item_assets2, "status": item_status, "errors": item_errors2})
+        task_items.append({"index": idx, "draft_id": draft.id, "status": item_status})
 
-        item_status = "completed" if not item_errors else "partial"
-        result_items.append({
-            "draft": _serialize_draft(draft),
-            "image_prompt": image_prompt_data,
-            "assets": item_assets,
-            "status": item_status,
-            "errors": item_errors,
-        })
-        task_items.append({
-            "index": idx,
-            "draft_id": draft.id,
-            "status": item_status,
-        })
-
-    task.status = "completed"
-    task.progress = 100
-    task.payload = {
-        **(task.payload or {}),
-        "items": task_items,
-        "created_count": created_count,
-        "failed_count": failed_count,
-    }
+    task.status = "completed"; task.progress = 100
+    task.payload = {**(task.payload or {}), "items": task_items, "created_count": created_count, "failed_count": failed_count}
     db.commit()
 
-    batch_result = {
-        "items": result_items,
-        "created_count": created_count,
-        "failed_count": failed_count,
-    }
-
-    return {
-        "id": f"chatcmpl_xhs_agent_drafts_{task.id}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": payload.model or "default",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": json.dumps(batch_result, ensure_ascii=False),
-                },
-                "finish_reason": "stop",
-            }
-        ],
-        "usage": {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None},
-    }
+    return _agent_drafts_response(task.id, payload.model, {"items": result_items, "created_count": created_count, "failed_count": failed_count})
 
 
 @router.post("/images/describe")

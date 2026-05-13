@@ -48,9 +48,10 @@ import {
   Typography,
   Upload,
 } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { DraftStepCard } from "../../../components/ai/draft-step-card";
 import { PageHeader } from "../../../components/layout/app-shell";
 import {
   addDraftAsset,
@@ -62,11 +63,9 @@ import {
   fetchSavedNote,
   fetchUserImages,
   generateImageWithAi,
-  generateNoteWithAi,
   generateTagOptions,
   generateTitleOptions,
   reorderDraftAssets,
-  rewriteDraftWithAi,
   sendDraftToPublish,
   updateDraft,
   updateDraftAsset,
@@ -74,6 +73,7 @@ import {
 } from "../../../lib/api";
 import { formatShanghaiTime } from "../../../lib/time";
 import type { DraftAsset } from "../../../lib/api";
+import { useDraftGeneration } from "../../../hooks/use-draft-generation";
 import type { Draft, GeneratedImageAsset, SavedNote, UserImageFile } from "../../../types";
 
 const { Text, Paragraph } = Typography;
@@ -208,14 +208,11 @@ export function XhsDraftsPage() {
   const [sourceAssets, setSourceAssets] = useState<DraftAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isRewriting, setIsRewriting] = useState(false);
   const [isPolishingTitles, setIsPolishingTitles] = useState(false);
   const [isPolishingTags, setIsPolishingTags] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isSendingPublish, setIsSendingPublish] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rewritePreview, setRewritePreview] = useState<string | null>(null);
   const [optimizeModalOpen, setOptimizeModalOpen] = useState(false);
   const [optimizeAssetId, setOptimizeAssetId] = useState<number | null>(null);
   const [optimizePrompt, setOptimizePrompt] = useState("");
@@ -233,6 +230,9 @@ export function XhsDraftsPage() {
   const [selectedAssetUrls, setSelectedAssetUrls] = useState<string[]>([]);
   const [refPickerOpen, setRefPickerOpen] = useState(false);
   const [refPickerUrlInput, setRefPickerUrlInput] = useState("");
+
+  const { steps: genSteps, running: genRunning, run: genRun, stop: genStop } = useDraftGeneration();
+  const prevGenRunningRef = useRef(false);
 
   const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId) ?? null;
   const imageAssets = sourceAssets.filter((a) => a.asset_type === "image");
@@ -453,56 +453,28 @@ export function XhsDraftsPage() {
       setError("请先填写选题。");
       return;
     }
-    setIsGenerating(true);
     clearStatus();
-    try {
-      const draft = await generateNoteWithAi({
-        platform: "xhs",
-        topic: topic.trim(),
-        reference,
-        instruction,
-      });
-      upsertDraft(draft, "generate");
-      setMessage(`已生成草稿 #${draft.id}，可继续编辑或送入发布中心。`);
-    } catch {
-      setError("AI 生成笔记失败，请确认已配置默认文本模型。");
-    } finally {
-      setIsGenerating(false);
-    }
+    const requestText = reference.trim()
+      ? `${topic.trim()}\n\n参考材料：${reference.trim()}\n\n要求：${instruction}`
+      : `${topic.trim()}\n\n要求：${instruction}`;
+    void genRun({ mode: "generate", request: requestText, draftCount: 1, imagesPerDraft: 0 });
   }
 
-  async function handleRewrite() {
+  function handleRewrite() {
     if (!selectedDraft) {
       setError("请先选择一个草稿。");
       return;
     }
-    setIsRewriting(true);
     clearStatus();
-    setRewritePreview(null);
-    try {
-      const saved = await updateDraft(selectedDraft.id, { title, body });
-      const rewritten = await rewriteDraftWithAi({ draft_id: saved.id, instruction: systemPrompt + "\n" + instruction });
-      setRewritePreview(rewritten.body);
-      setMessage("AI 改写完成，请在下方对比后决定是否采用。");
-    } catch (err: unknown) {
-      const d = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(d || "AI 改写失败，请确认已配置默认文本模型。");
-    } finally {
-      setIsRewriting(false);
-    }
-  }
-
-  function applyRewrite() {
-    if (rewritePreview !== null) {
-      setBody(rewritePreview);
-      setRewritePreview(null);
-      setMessage("已采用 AI 改写内容。");
-    }
-  }
-
-  function discardRewrite() {
-    setRewritePreview(null);
-    setMessage("已放弃 AI 改写内容。");
+    void genRun({
+      mode: "rewrite",
+      request: "",
+      existingTitle: title,
+      existingBody: body,
+      rewriteInstruction: systemPrompt + "\n" + instruction,
+      draftCount: 1,
+      imagesPerDraft: 0,
+    });
   }
 
   async function handleGenerateTitles() {
@@ -568,6 +540,14 @@ export function XhsDraftsPage() {
   useEffect(() => {
     void loadDrafts();
   }, []);
+
+  // Reload drafts list when generation finishes
+  useEffect(() => {
+    if (prevGenRunningRef.current && !genRunning && genSteps.length > 0) {
+      void loadDrafts();
+    }
+    prevGenRunningRef.current = genRunning;
+  }, [genRunning]);
 
   useEffect(() => {
     if (!selectedDraft) {
@@ -902,7 +882,7 @@ export function XhsDraftsPage() {
               />
               <Button
                 onClick={handleRewrite}
-                loading={isRewriting}
+                loading={genRunning}
                 disabled={!selectedDraft}
                 block
                 type="primary"
@@ -910,16 +890,17 @@ export function XhsDraftsPage() {
               >
                 AI 改写正文
               </Button>
+              {genRunning && (
+                <Button size="small" danger onClick={genStop} block style={{ marginTop: 4 }}>
+                  停止
+                </Button>
+              )}
             </div>
 
-            {rewritePreview !== null && (
-              <Card size="small" title="改写结果" style={{ marginBottom: 16, background: "#1a2332", borderColor: "#1668dc40" }}>
-                <Paragraph style={{ whiteSpace: "pre-wrap", color: "rgba(255,255,255,.75)", fontSize: 13, maxHeight: 240, overflow: "auto" }}>{rewritePreview}</Paragraph>
-                <Space style={{ marginTop: 8 }}>
-                  <Button type="primary" size="small" onClick={applyRewrite}>采用</Button>
-                  <Button size="small" onClick={discardRewrite}>放弃</Button>
-                </Space>
-              </Card>
+            {genSteps.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                {genSteps.map((step, i) => <DraftStepCard key={i} step={step} />)}
+              </div>
             )}
 
             <Divider style={{ margin: "12px 0" }} />
@@ -1328,17 +1309,27 @@ export function XhsDraftsPage() {
                 placeholder="保留事实，增强小红书种草感，语气自然。"
               />
             </Form.Item>
-            <Button
-              type="primary"
-              icon={<RobotOutlined />}
-              onClick={handleGenerateNote}
-              loading={isGenerating}
-              block
-            >
-              生成草稿
-            </Button>
+            <Space style={{ width: "100%" }}>
+              <Button
+                type="primary"
+                icon={<RobotOutlined />}
+                onClick={handleGenerateNote}
+                loading={genRunning}
+                block
+              >
+                生成草稿
+              </Button>
+              {genRunning && (
+                <Button size="small" danger onClick={genStop}>停止</Button>
+              )}
+            </Space>
           </Form>
         </Card>
+        {genSteps.length > 0 && (
+          <Card title="生成进度" size="small" style={{ marginTop: 16 }}>
+            {genSteps.map((step, i) => <DraftStepCard key={i} step={step} />)}
+          </Card>
+        )}
       </div>
     );
   }

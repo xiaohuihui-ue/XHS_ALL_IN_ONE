@@ -766,6 +766,16 @@ export interface AgentDraftPayload {
     response_format?: string;
   };
   user?: string;
+  // step-mode fields
+  step?: "titles" | "draft" | "images";
+  selected_title?: string;
+  draft_id?: number;
+  image_prompt?: string;
+  // step=images fields
+  cover_strategy?: CoverStrategy;
+  image_prompt_spec?: ImagePromptSpec;
+  draft_body?: string;
+  reference_image_urls?: string[];
 }
 
 export interface AgentDraftItem {
@@ -777,7 +787,7 @@ export interface AgentDraftItem {
     tags: Array<{ name: string }>;
     created_at: string;
   };
-  image_prompt: {
+  image_prompt?: {
     positive_prompt: string;
     negative_prompt: string;
     reference_strategy: string;
@@ -792,6 +802,69 @@ export interface AgentDraftItem {
   }>;
   status: "completed" | "partial" | "failed";
   errors: string[];
+  // Extended fields
+  cover_strategy?: CoverStrategy;
+  image_prompt_spec?: ImagePromptSpec;
+  publish_tips?: string;
+  iteration_history?: IterationRound[];
+  image_quality_check?: ImageQualityCheck;
+}
+
+export interface CoverStrategy {
+  cover_goal: string;
+  cover_type: string;
+  visual_core: string;
+  title_space: string;
+  text_in_image: boolean;
+}
+
+export interface ImagePromptSpec {
+  L1_publish_goal: string;
+  L2_topic: string;
+  L3_audience: string;
+  L4_main_subject: string;
+  L5_scene: string;
+  L6_composition: string;
+  L7_style: string;
+  L8_color_lighting: string;
+  L9_emotion: string;
+  L10_details: string;
+  L11_platform_adaptation: string;
+  L12_negative_constraints: string;
+}
+
+export interface PromptQualityScore {
+  theme_clarity: number;
+  subject_clarity: number;
+  composition_control: number;
+  xiaohongshu_fit: number;
+  style_consistency: number;
+  negative_constraints: number;
+  text_risk: number;
+  overall_score: number;
+}
+
+export interface IterationRound {
+  iteration_round: number;
+  draft_prompt: string;
+  prompt_quality_score: PromptQualityScore;
+  failed_items: string[];
+  improvement_suggestions: string[];
+  whether_need_rewrite: boolean;
+  final_image_prompt: string;
+}
+
+export interface ImageQualityCheck {
+  is_relevant_to_topic: boolean;
+  has_text_or_garbled_text: boolean;
+  has_logo_or_watermark: boolean;
+  has_qrcode: boolean;
+  has_sensitive_content: boolean;
+  has_deformed_face_or_hands: boolean;
+  is_xiaohongshu_cover_ready: boolean;
+  has_title_space: boolean;
+  need_retry: boolean;
+  retry_reason: string;
 }
 
 export interface AgentDraftBatchResult {

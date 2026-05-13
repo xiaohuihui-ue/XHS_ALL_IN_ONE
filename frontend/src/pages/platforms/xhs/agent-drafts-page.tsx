@@ -141,7 +141,7 @@ export function XhsAgentDraftsPage() {
               <Space size={4}>
                 <Text type="secondary" style={{ fontSize: 12 }}>每篇图片</Text>
                 <InputNumber
-                  min={0} max={3} value={imagesPerDraft}
+                  min={1} max={5} value={imagesPerDraft}
                   onChange={(v) => setImagesPerDraft(v ?? 1)}
                   size="small" style={{ width: 56 }}
                 />

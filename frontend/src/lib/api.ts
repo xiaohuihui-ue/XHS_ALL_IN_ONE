@@ -898,10 +898,11 @@ export async function runAutoTask(taskId: number): Promise<AutoTaskRunResult> {
 }
 
 export async function generateAgentDrafts(
-  payload: AgentDraftPayload
+  payload: AgentDraftPayload,
+  timeout?: number,
 ): Promise<Record<string, unknown>> {
   const res = await http.post<{
     choices: Array<{ message: { content: string } }>;
-  }>("/ai/agent-drafts/chat/completions", payload);
+  }>("/ai/agent-drafts/chat/completions", payload, timeout !== undefined ? { timeout } : undefined);
   return JSON.parse(res.data.choices[0].message.content) as Record<string, unknown>;
 }

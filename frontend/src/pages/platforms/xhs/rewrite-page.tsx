@@ -35,6 +35,7 @@ import {
   Form,
   Image,
   Input,
+  InputNumber,
   List,
   message as antMessage,
   Modal,
@@ -231,6 +232,7 @@ export function XhsDraftsPage() {
   const [refPickerOpen, setRefPickerOpen] = useState(false);
   const [refPickerUrlInput, setRefPickerUrlInput] = useState("");
 
+  const [imagesPerDraft, setImagesPerDraft] = useState(1);
   const { steps: genSteps, running: genRunning, run: genRun, stop: genStop } = useDraftGeneration();
   const prevGenRunningRef = useRef(false);
 
@@ -457,7 +459,7 @@ export function XhsDraftsPage() {
     const requestText = reference.trim()
       ? `${topic.trim()}\n\n参考材料：${reference.trim()}\n\n要求：${instruction}`
       : `${topic.trim()}\n\n要求：${instruction}`;
-    void genRun({ mode: "generate", request: requestText, draftCount: 1, imagesPerDraft: 0 });
+    void genRun({ mode: "generate", request: requestText, draftCount: 1, imagesPerDraft });
   }
 
   function handleRewrite() {
@@ -1284,7 +1286,7 @@ export function XhsDraftsPage() {
   // ---- Generate mode: centered card ----
   function renderGenerateMode() {
     return (
-      <div style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div style={{ maxWidth: 640, width:640, margin: "0 auto" }}>
         <Card title="AI 笔记生成">
           <Form layout="vertical">
             <Form.Item label="选题" required>
@@ -1307,6 +1309,15 @@ export function XhsDraftsPage() {
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
                 placeholder="保留事实，增强小红书种草感，语气自然。"
+              />
+            </Form.Item>
+            <Form.Item label="每篇图片数">
+              <InputNumber
+                min={3}
+                max={5}
+                value={imagesPerDraft}
+                onChange={(v) => setImagesPerDraft(v ?? 0)}
+                style={{ width: 80 }}
               />
             </Form.Item>
             <Space style={{ width: "100%" }}>

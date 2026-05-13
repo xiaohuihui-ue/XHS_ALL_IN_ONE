@@ -1318,7 +1318,7 @@ export function XhsAgentDraftsPage() {
                 </Col>
                 <Col span={12}>
                   <Form.Item name="images_per_draft" label="每篇图片数">
-                    <InputNumber min={0} max={3} style={{ width: "100%" }} />
+                    <InputNumber min={3} max={5} style={{ width: "100%" }} />
                   </Form.Item>
                 </Col>
               </Row>

@@ -1,5 +1,6 @@
 from backend.app.models.ai import DEFAULT_TEXT_MODEL_NAME, AiDraft, AiGeneratedAsset, DraftAsset, ModelConfig
 from backend.app.models.api_log import ApiLog
+from backend.app.models.ai_http_log import AiHttpLog, RequestType
 from backend.app.models.auto_task import AutoTask
 from backend.app.models.keyword_group import KeywordGroup
 from backend.app.models.login_session import LoginSession
@@ -15,6 +16,7 @@ __all__ = [
     "AccountCookieVersion",
     "AiDraft",
     "AiGeneratedAsset",
+    "AiHttpLog",
     "ApiLog",
     "AutoTask",
     "DEFAULT_TEXT_MODEL_NAME",
@@ -31,6 +33,7 @@ __all__ = [
     "PlatformAccount",
     "PublishAsset",
     "PublishJob",
+    "RequestType",
     "Tag",
     "Task",
     "User",

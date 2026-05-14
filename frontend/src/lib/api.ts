@@ -80,6 +80,7 @@ import type {
   AgentDraftPayload,
   AgentDraftBatchResult
 } from "../types";
+import { withRetry } from "./retry";
 
 const http = axios.create({
   baseURL: "/api",
@@ -572,13 +573,17 @@ export async function deleteUserImage(fileName: string): Promise<void> {
 }
 
 export async function generateCoverWithAi(payload: GenerateCoverPayload): Promise<GeneratedImageAsset> {
-  const response = await http.post<GeneratedImageAsset>("/ai/images/generate-cover", payload);
-  return response.data;
+  return withRetry(async () => {
+    const response = await http.post<GeneratedImageAsset>("/ai/images/generate-cover", payload);
+    return response.data;
+  });
 }
 
 export async function generateImageWithAi(payload: GenerateImagePayload): Promise<GenerateImageResult> {
-  const response = await http.post<GenerateImageResult>("/ai/images/generate", payload, { timeout: 180000 });
-  return response.data;
+  return withRetry(async () => {
+    const response = await http.post<GenerateImageResult>("/ai/images/generate", payload, { timeout: 180000 });
+    return response.data;
+  });
 }
 
 export async function fetchUserImages(): Promise<{ items: UserImageFile[] }> {

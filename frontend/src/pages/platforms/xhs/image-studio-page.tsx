@@ -1,4 +1,5 @@
 import {
+  CopyOutlined,
   DeleteOutlined,
   FileImageOutlined,
   InboxOutlined,
@@ -19,6 +20,7 @@ import {
   Empty,
   Image,
   Input,
+  message as antMessage,
   Modal,
   Row,
   Space,
@@ -549,6 +551,40 @@ export function XhsImageStudioPage() {
                             >
                               {formatShanghaiTime(asset.created_at)}
                             </Text>
+                          </div>
+                          <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                            <Button
+                              type="text" size="small" icon={<CopyOutlined />}
+                              onClick={() => {
+                                navigator.clipboard.writeText(asset.prompt);
+                                antMessage.success("提示词已复制");
+                              }}
+                              style={{ flex: 1 }}
+                            >
+                              提示词
+                            </Button>
+                            <Button
+                              type="text" size="small" icon={<CopyOutlined />}
+                              onClick={async () => {
+                                if (!isRenderableImage(asset.file_path)) {
+                                  antMessage.warning("图片不可用");
+                                  return;
+                                }
+                                try {
+                                  const resp = await fetch(asset.file_path);
+                                  const blob = await resp.blob();
+                                  await navigator.clipboard.write([
+                                    new ClipboardItem({ [blob.type]: blob }),
+                                  ]);
+                                  antMessage.success("图片已复制");
+                                } catch {
+                                  antMessage.error("复制图片失败");
+                                }
+                              }}
+                              style={{ flex: 1 }}
+                            >
+                              图片
+                            </Button>
                           </div>
                           <Button
                             type="text" danger size="small" icon={<DeleteOutlined />}

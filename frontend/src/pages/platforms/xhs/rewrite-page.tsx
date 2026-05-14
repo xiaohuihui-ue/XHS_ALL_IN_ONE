@@ -1004,14 +1004,14 @@ export function XhsDraftsPage() {
                       {isImage ? (
                         <Image
                           src={asset.url || asset.local_path}
-                          width={320}
-                          height={320}
+                          width={480}
+                          height={480}
                           style={{ objectFit: "contain", borderRadius: 6 }}
                           referrerPolicy="no-referrer"
                           preview={{ mask: <EyeOutlined style={{ fontSize: 16 }} /> }}
                         />
                       ) : (
-                        <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ height: 480, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <Space direction="vertical" align="center"><PlayCircleOutlined style={{ fontSize: 32, color: "#1668dc" }} /><Text style={{ fontSize: 12 }}>视频</Text></Space>
                         </div>
                       )}
@@ -1023,14 +1023,14 @@ export function XhsDraftsPage() {
                       {optimizeResult ? (
                         <Image
                           src={optimizeResult}
-                          width={320}
-                          height={320}
+                          width={480}
+                          height={480}
                           style={{ objectFit: "contain", borderRadius: 6 }}
                           referrerPolicy="no-referrer"
                           preview={{ mask: <EyeOutlined style={{ fontSize: 16 }} /> }}
                         />
                       ) : (
-                        <div style={{ width: 320, height: 320, margin: "0 auto", border: "1px dashed #434343", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ width: 480, height: 480, margin: "0 auto", border: "1px dashed #434343", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <Text type="secondary" style={{ fontSize: 12 }}>{isOptimizing ? "生成中..." : "等待生成"}</Text>
                         </div>
                       )}
@@ -1305,12 +1305,12 @@ export function XhsDraftsPage() {
               <Input
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
-                placeholder="保留事实，增强小红书种草感，语气自然。"
+                placeholder="保留事实，图片写实,，需要考虑空间连续和一致性，增强小红书种草感，语气自然。"
               />
             </Form.Item>
             <Form.Item label="每篇图片数">
               <InputNumber
-                min={0}
+                min={3}
                 max={5}
                 value={imagesPerDraft}
                 onChange={(v) => setImagesPerDraft(v ?? 0)}

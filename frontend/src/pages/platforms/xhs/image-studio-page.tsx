@@ -697,7 +697,7 @@ export function XhsImageStudioPage() {
                             borderRadius: 4,
                             overflow: "hidden",
                             border: "1px solid #333",
-                            height: 80,
+                            height: 240,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -708,7 +708,7 @@ export function XhsImageStudioPage() {
                             src={img.url}
                             alt={img.file_name}
                             style={{
-                              maxHeight: 80,
+                              maxHeight: 240,
                               maxWidth: "100%",
                               objectFit: "contain",
                             }}
@@ -744,7 +744,7 @@ export function XhsImageStudioPage() {
                             borderRadius: 4,
                             overflow: "hidden",
                             border: "1px solid #333",
-                            height: 80,
+                            height: 240,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -756,7 +756,7 @@ export function XhsImageStudioPage() {
                               src={asset.file_path}
                               alt={asset.prompt}
                               style={{
-                                maxHeight: 80,
+                                maxHeight: 240,
                                 maxWidth: "100%",
                                 objectFit: "contain",
                               }}

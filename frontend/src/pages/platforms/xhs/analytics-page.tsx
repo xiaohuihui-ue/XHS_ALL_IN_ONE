@@ -173,7 +173,7 @@ export function XhsAnalyticsPage() {
 
   return (
     <div>
-      <Alert type="info" showIcon message="数据洞察模块正在开发优化中，当前为基础版本，更多分析维度即将上线。" style={{ marginBottom: 16 }} />
+      <Alert type="info" showIcon message="数据洞察模块正在开发优化中，当前为基础版本，更多分析维度即将上线。" style={{ marginBottom: 16, display: "none"}} />
       <PageHeader
         eyebrow="XHS Analytics"
         title="数据洞察"

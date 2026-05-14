@@ -887,9 +887,9 @@ export function XhsDraftsPage() {
                           <div style={{ padding: 8, background: "rgba(255,255,255,0.04)", borderRadius: 8, textAlign: "center" }}>
                             <Text type="secondary" style={{ fontSize: 11, display: "block", marginBottom: 4 }}>当前素材</Text>
                             {isImage ? (
-                              <img src={asset.url || asset.local_path} style={{ width: 140, height: 140, objectFit: "cover", borderRadius: 6 }} referrerPolicy="no-referrer" />
+                              <img src={asset.url || asset.local_path} style={{ width: 480, height: 480, objectFit: "cover", borderRadius: 6 }} referrerPolicy="no-referrer" />
                             ) : (
-                              <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <div style={{ height: 480, display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 <Space direction="vertical" align="center"><PlayCircleOutlined style={{ fontSize: 32, color: "#1668dc" }} /><Text style={{ fontSize: 12 }}>视频</Text></Space>
                               </div>
                             )}
@@ -899,9 +899,9 @@ export function XhsDraftsPage() {
                           <div style={{ padding: 8, background: "rgba(255,255,255,0.04)", borderRadius: 8, textAlign: "center", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
                             <Text type="secondary" style={{ fontSize: 11, display: "block", marginBottom: 4 }}>优化后预览</Text>
                             {optimizeResult ? (
-                              <img src={optimizeResult} style={{ width: 140, height: 140, objectFit: "cover", borderRadius: 6 }} referrerPolicy="no-referrer" />
+                              <img src={optimizeResult} style={{ width: 480, height: 480, objectFit: "cover", borderRadius: 6 }} referrerPolicy="no-referrer" />
                             ) : (
-                              <div style={{ width: 140, height: 140, border: "1px dashed #434343", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <div style={{ width: 480, height: 480, border: "1px dashed #434343", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 <Text type="secondary" style={{ fontSize: 12 }}>{isOptimizing ? "生成中..." : "等待生成"}</Text>
                               </div>
                             )}

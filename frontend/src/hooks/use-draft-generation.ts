@@ -98,7 +98,7 @@ function buildMessages(mode: DraftGenerationMode, options: DraftGenerationOption
 
   let userText: string;
   if (mode === "rewrite") {
-    userText = `改写以下小红书草稿。\n\n原标题：${options.existingTitle || ""}\n原正文：${options.existingBody || ""}\n\n改写要求：${options.rewriteInstruction || "保留事实，增强小红书种草感，语气自然。"}`;
+    userText = `改写以下小红书草稿。\n\n原标题：${options.existingTitle || ""}\n原正文：${options.existingBody || ""}\n\n改写要求：${options.rewriteInstruction || "保留事实，图片写实,，需要考虑空间连续和一致性，增强小红书种草感，语气自然。"}`;
   } else {
     userText = options.request;
   }

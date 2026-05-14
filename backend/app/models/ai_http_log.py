@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import DateTime, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.core.database import Base
@@ -29,11 +29,11 @@ class AiHttpLog(Base):
     # 完整请求 URL
     url: Mapped[str] = mapped_column(Text)
     # JSON 请求体（api_key 已脱敏为 ***）
-    request_body: Mapped[Optional[dict]] = mapped_column(default=None)
+    request_body: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # HTTP 响应状态码
     response_status: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # JSON 响应体（text 类型截断 content 字段到 2000 字符）
-    response_body: Mapped[Optional[dict]] = mapped_column(default=None)
+    response_body: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # 请求耗时，毫秒
     duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # 错误信息

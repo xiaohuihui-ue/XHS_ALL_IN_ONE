@@ -178,6 +178,11 @@ def _image_model_context(db: Session, current_user: User) -> tuple[ModelConfig, 
     return model_config, api_key
 
 
+def _download_asset(url: str, user_id: int, asset_type: str) -> str | None:
+    from backend.app.services.asset_downloader import download_asset_to_local
+    return download_asset_to_local(url, user_id, asset_type)
+
+
 def _serialize_generated_asset(asset: AiGeneratedAsset) -> dict[str, Any]:
     return {
         "id": asset.id,
@@ -471,13 +476,16 @@ def generate_cover(
             style=payload.style,
         ),
     )
+    image_url = result.get("url") or ""
+    local_name = _download_asset(image_url, current_user.id, "image")
+    local_file_path = f"/api/files/media/{local_name}" if local_name else image_url
     asset = AiGeneratedAsset(
         user_id=current_user.id,
         draft_id=payload.draft_id,
         prompt=payload.prompt,
         model_name=model_config.model_name,
         params={"size": payload.size, "style": payload.style, "raw": result.get("raw")},
-        file_path=result.get("url") or "",
+        file_path=local_file_path,
     )
     db.add(asset)
     db.flush()
@@ -507,14 +515,17 @@ def generate_image(
             reference_images=payload.reference_images or None,
         ),
     )
-    response_data: dict = {"url": result.get("url") or "", "raw": result.get("raw")}
+    gen_url = result.get("url") or ""
+    response_data: dict = {"url": gen_url, "raw": result.get("raw")}
     if payload.save_to_assets:
+        local_name_gen = _download_asset(gen_url, current_user.id, "image")
+        local_file_path_gen = f"/api/files/media/{local_name_gen}" if local_name_gen else gen_url
         asset = AiGeneratedAsset(
             user_id=current_user.id,
             prompt=payload.prompt,
             model_name=model_config.model_name,
             params={"reference_images": payload.reference_images, "raw": result.get("raw")},
-            file_path=result.get("url") or "",
+            file_path=local_file_path_gen,
         )
         db.add(asset)
         db.flush()
@@ -690,17 +701,20 @@ def agent_drafts_chat_completions(
                 )
                 image_url = img_retry_result.get("url") or ""
 
+                local_name = _download_asset(image_url, current_user.id, "image")
+                local_file_path = f"/api/files/media/{local_name}" if local_name else image_url
+
                 gen_asset = AiGeneratedAsset(
                     user_id=current_user.id,
                     draft_id=draft.id,
                     prompt=final_image_prompt,
                     model_name=image_model_config.model_name,
                     params={"size": payload.image_options.size, "style": payload.image_options.style},
-                    file_path="",
+                    file_path=local_file_path,
                 )
                 db.add(gen_asset)
                 db.flush()
-                draft_asset = DraftAsset(draft_id=draft.id, asset_type="image", url=image_url, local_path="", sort_order=img_idx)
+                draft_asset = DraftAsset(draft_id=draft.id, asset_type="image", url=image_url, local_path=local_name or "", sort_order=img_idx)
                 db.add(draft_asset)
                 db.flush()
                 item_assets.append({"id": draft_asset.id, "draft_id": draft.id, "asset_type": "image", "url": image_url, "local_path": "", "sort_order": img_idx})
@@ -776,9 +790,11 @@ def agent_drafts_chat_completions(
                 try:
                     img_result = image_ai_client.generate_image(model_config=image_model_config, api_key=image_api_key, prompt=positive_prompt2, reference_images=ref_urls if ref_urls else None)
                     image_url = img_result.get("url") or ""
-                    gen_asset = AiGeneratedAsset(user_id=current_user.id, draft_id=draft.id, prompt=positive_prompt2, model_name=image_model_config.model_name, params={"size": payload.image_options.size, "style": payload.image_options.style}, file_path="")
+                    local_name2 = _download_asset(image_url, current_user.id, "image")
+                    local_file_path2 = f"/api/files/media/{local_name2}" if local_name2 else image_url
+                    gen_asset = AiGeneratedAsset(user_id=current_user.id, draft_id=draft.id, prompt=positive_prompt2, model_name=image_model_config.model_name, params={"size": payload.image_options.size, "style": payload.image_options.style}, file_path=local_file_path2)
                     db.add(gen_asset); db.flush()
-                    draft_asset = DraftAsset(draft_id=draft.id, asset_type="image", url=image_url, local_path="", sort_order=img_idx)
+                    draft_asset = DraftAsset(draft_id=draft.id, asset_type="image", url=image_url, local_path=local_name2 or "", sort_order=img_idx)
                     db.add(draft_asset); db.flush()
                     item_assets2.append({"id": draft_asset.id, "draft_id": draft.id, "asset_type": "image", "url": image_url, "local_path": "", "sort_order": img_idx})
                 except Exception as exc:

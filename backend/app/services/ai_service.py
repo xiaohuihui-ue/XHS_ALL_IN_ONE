@@ -6,6 +6,11 @@ from typing import Any, Protocol
 
 import requests
 from pydantic import BaseModel, Field
+from unittest.mock import MagicMock
+
+from backend.app.models import ModelConfig
+from backend.app.services.http_logging import ai_http_log, set_current_task_id
+from backend.app.models.ai_http_log import RequestType
 
 from backend.app.models import ModelConfig
 
@@ -248,21 +253,23 @@ class OpenAICompatibleTextClient:
             raise ValueError("Text model api_key is required")
 
         endpoint = f"{model_config.base_url.rstrip('/')}/chat/completions"
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
+        resp = ai_http_log(
+            task_id=None,
+            request_type=RequestType.TEXT,
+            url=endpoint,
+            request_body={
+                "_headers": {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 "model": model_config.model_name,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": temperature,
+                "_timeout": 60,
             },
-            timeout=60,
         )
-        response.raise_for_status()
-        payload = response.json()
+        resp.raise_for_status()
+        payload = resp.json()
         try:
             content = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
@@ -439,14 +446,18 @@ class OpenAICompatibleTextClient:
             body.update(extra_body)
 
         endpoint = f"{model_config.base_url.rstrip('/')}/chat/completions"
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json=body,
-            timeout=120,
+        resp = ai_http_log(
+            task_id=None,
+            request_type=RequestType.TEXT,
+            url=endpoint,
+            request_body={
+                "_headers": {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                **body,
+                "_timeout": 120,
+            },
         )
-        response.raise_for_status()
-        payload = response.json()
+        resp.raise_for_status()
+        payload = resp.json()
         try:
             return payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
@@ -690,21 +701,23 @@ class OpenAICompatibleTextClient:
         )
         user_prompt = f"{brief}\n\n请生成生图提示词（纯文本，不要代码块包裹）："
         endpoint = f"{base_url.rstrip('/')}/chat/completions"
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
+        resp = ai_http_log(
+            task_id=None,
+            request_type=RequestType.TEXT,
+            url=endpoint,
+            request_body={
+                "_headers": {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.7,
+                "_timeout": 60,
             },
-            timeout=60,
         )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
         return re.sub(r"^```(?:json)?\s*\n?", "", re.sub(r"\n?```\s*$", "", content.strip()))
 
     @staticmethod
@@ -733,21 +746,23 @@ class OpenAICompatibleTextClient:
             '"whether_need_rewrite": bool}'
         )
         endpoint = f"{base_url.rstrip('/')}/chat/completions"
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
+        resp = ai_http_log(
+            task_id=None,
+            request_type=RequestType.TEXT,
+            url=endpoint,
+            request_body={
+                "_headers": {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"待质检提示词：\n{draft_prompt}"},
                 ],
                 "temperature": 0.3,
+                "_timeout": 60,
             },
-            timeout=60,
         )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
         stripped = re.sub(r"^```(?:json)?\s*\n?", "", re.sub(r"\n?```\s*$", "", content.strip()))
         try:
             data = json.loads(stripped)
@@ -778,21 +793,23 @@ class OpenAICompatibleTextClient:
             "请输出重写后的提示词（纯文本）："
         )
         endpoint = f"{base_url.rstrip('/')}/chat/completions"
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
+        resp = ai_http_log(
+            task_id=None,
+            request_type=RequestType.TEXT,
+            url=endpoint,
+            request_body={
+                "_headers": {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.6,
+                "_timeout": 60,
             },
-            timeout=60,
         )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
         return re.sub(r"^```(?:json)?\s*\n?", "", re.sub(r"\n?```\s*$", "", content.strip()))
 
     def iterate_image_prompt(
@@ -936,14 +953,18 @@ class OpenAICompatibleImageClient:
                 body["image"] = resolved
                 body["sequential_image_generation"] = "disabled"
             body["watermark"] = False
+        resp = ai_http_log(
+            task_id=None,
+            request_type=RequestType.IMAGE,
+            url=endpoint,
+            request_body={
+                "_headers": {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                **body,
+                "_timeout": 180,
+            },
+        )
         try:
-            response = requests.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=body,
-                timeout=180,
-            )
-            response.raise_for_status()
+            resp.raise_for_status()
         except requests.HTTPError as exc:
             detail = ""
             try:
@@ -951,7 +972,7 @@ class OpenAICompatibleImageClient:
             except Exception:
                 pass
             raise ValueError(f"图片生成失败: {detail or exc}") from exc
-        payload = response.json()
+        payload = resp.json()
         try:
             item = payload["data"][0]
         except (KeyError, IndexError, TypeError) as exc:
@@ -1042,10 +1063,12 @@ class OpenAICompatibleImageClient:
     ) -> str:
         self._validate(model_config=model_config, api_key=api_key)
         endpoint = f"{model_config.base_url.rstrip('/')}/chat/completions"
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
+        resp = ai_http_log(
+            task_id=None,
+            request_type=RequestType.TEXT,
+            url=endpoint,
+            request_body={
+                "_headers": {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 "model": model_config.model_name,
                 "messages": [
                     {"role": "system", "content": "你是小红书图片分析助手。"},
@@ -1057,11 +1080,11 @@ class OpenAICompatibleImageClient:
                         ],
                     },
                 ],
+                "_timeout": 120,
             },
-            timeout=120,
         )
-        response.raise_for_status()
-        payload = response.json()
+        resp.raise_for_status()
+        payload = resp.json()
         try:
             content = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
@@ -1115,10 +1138,12 @@ class OpenAICompatibleImageClient:
             "重点检查：乱码文字、Logo水印二维码、人物畸形、构图比例、标题留白。"
         )
         try:
-            response = requests.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {text_api_key}", "Content-Type": "application/json"},
-                json={
+            resp = ai_http_log(
+                task_id=None,
+                request_type=RequestType.TEXT,
+                url=endpoint,
+                request_body={
+                    "_headers": {"Authorization": f"Bearer {text_api_key}", "Content-Type": "application/json"},
                     "model": text_model_config.model_name,
                     "messages": [
                         {"role": "system", "content": "你是一个小红书图片质检专家。"},
@@ -1131,11 +1156,11 @@ class OpenAICompatibleImageClient:
                         },
                     ],
                     "temperature": 0.3,
+                    "_timeout": 120,
                 },
-                timeout=120,
             )
-            response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
             stripped = re.sub(r"^```(?:json)?\s*\n?", "", re.sub(r"\n?```\s*$", "", content.strip()))
             data = json.loads(stripped)
             return ImageQualityCheck(**data).model_dump()

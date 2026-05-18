@@ -334,6 +334,7 @@ export type CreateDraftPayload = {
 };
 
 export type ModelType = "text" | "image";
+export type ModelCapability = "text_generation" | "vision" | "image_generation" | "image_edit";
 
 export type ModelConfig = {
   id: number;
@@ -344,6 +345,7 @@ export type ModelConfig = {
   base_url: string;
   has_api_key: boolean;
   is_default: boolean;
+  capabilities: ModelCapability[];
 };
 
 export type ModelConfigPayload = {
@@ -354,6 +356,7 @@ export type ModelConfigPayload = {
   base_url: string;
   api_key: string;
   is_default: boolean;
+  capabilities: ModelCapability[];
 };
 
 export type ModelConfigBackup = {
@@ -417,6 +420,10 @@ export type GenerateCoverPayload = {
 export type GenerateImagePayload = {
   prompt: string;
   reference_images?: string[];
+  size?: string;
+  quality?: string;
+  style?: string;
+  response_format?: string;
   save_to_assets?: boolean;
 };
 
@@ -737,6 +744,14 @@ export interface AgentDraftRequestMessage {
       >;
 }
 
+export interface AgentResearchOptions {
+  keywords?: string[];
+  reference_note_ids?: number[];
+  search_account_id?: number | null;
+  search_limit?: number;
+  auto_save?: boolean;
+}
+
 export interface AgentDraftPayload {
   model?: string;
   messages: AgentDraftRequestMessage[];
@@ -754,8 +769,10 @@ export interface AgentDraftPayload {
   };
   metadata?: {
     platform: "xhs";
+    account_id?: number | null;
     save_to_drafts?: string;
     output_requirements?: string;
+    research?: AgentResearchOptions;
   };
   image_options?: {
     model?: string;
@@ -806,8 +823,10 @@ export interface AgentDraftItem {
   cover_strategy?: CoverStrategy;
   image_prompt_spec?: ImagePromptSpec;
   publish_tips?: string;
+  final_image_prompt?: string;
   iteration_history?: IterationRound[];
   image_quality_check?: ImageQualityCheck;
+  quality_check?: ImageQualityCheck;
 }
 
 export interface CoverStrategy {
@@ -865,10 +884,227 @@ export interface ImageQualityCheck {
   has_title_space: boolean;
   need_retry: boolean;
   retry_reason: string;
+  vision_check_status?: "checked" | "skipped" | "failed" | string;
+  vision_check_message?: string;
 }
 
 export interface AgentDraftBatchResult {
   items: AgentDraftItem[];
   created_count: number;
   failed_count: number;
+}
+
+export interface XhsAgentRunPayload extends AgentDraftPayload {
+  n?: number;
+}
+
+export interface XhsAgentResearchNote {
+  id: number;
+  note_id: string;
+  title: string;
+  content: string;
+  author_name: string;
+}
+
+export interface XhsAgentResearchSearchCandidate {
+  keyword: string;
+  note_id: string;
+  title: string;
+  content: string;
+  author_name: string;
+  note_url: string;
+  likes: number;
+  collects: number;
+  comments: number;
+}
+
+export interface XhsAgentResearch {
+  keywords: string[];
+  reference_notes: XhsAgentResearchNote[];
+  search?: {
+    enabled: boolean;
+    account_id?: number;
+    keywords?: string[];
+    candidate_count?: number;
+    saved_count?: number;
+    candidates?: XhsAgentResearchSearchCandidate[];
+    saved_notes?: XhsAgentResearchNote[];
+  };
+}
+
+export interface XhsAgentRunResult {
+  run_id: number;
+  status: string;
+  progress?: number;
+  account_check?: Record<string, unknown>;
+  model_check?: Record<string, unknown>;
+  publish_preview?: Record<string, unknown>;
+  research?: XhsAgentResearch;
+  result?: AgentDraftBatchResult;
+  report?: {
+    file_name: string;
+    file_path: string;
+    download_url: string;
+  };
+  publish_confirmation?: {
+    created_count: number;
+    publish_job_ids: number[];
+    draft_ids: number[];
+    publish_mode: "immediate" | "scheduled" | string;
+  };
+}
+
+export interface ConfirmXhsAgentRunPayload {
+  platform_account_id?: number | null;
+  draft_ids?: number[];
+  publish_mode?: "immediate" | "scheduled";
+  scheduled_at?: string | null;
+  topics?: string[];
+  location?: string | null;
+  privacy_type?: 0 | 1 | number | null;
+  is_private?: boolean | null;
+}
+
+export interface XhsAgentPublishJobPreview {
+  id: number;
+  platform_account_id?: number | null;
+  source_draft_id?: number | null;
+  platform: PlatformId;
+  title: string;
+  body: string;
+  publish_mode: "immediate" | "scheduled" | string;
+  publish_options: PublishOptions;
+  status: string;
+  scheduled_at?: string | null;
+  created_at: string;
+}
+
+export interface ConfirmXhsAgentRunResult {
+  run_id: number;
+  created_count: number;
+  items: XhsAgentPublishJobPreview[];
+  message: string;
+}
+
+export interface SourceImage {
+  id: string;
+  role: string;
+  url: string;
+}
+
+export type ImageEditTaskType =
+  | "style_transfer"
+  | "room_makeover"
+  | "material_replace"
+  | "lighting_enhance"
+  | "declutter"
+  | "cover_composition"
+  | "detail_enhance"
+  | "variation";
+
+export type ImageEditDomain = "home_decor" | "general";
+export type ImageEditOutputGoal = "xhs_cover" | "xhs_body" | "general";
+export type ImageEditRealismLevel = "low" | "medium" | "high";
+export type ImageEditArtifactStatus = "pending" | "planning" | "generating" | "reviewing" | "completed" | "failed";
+export type ImageEditCheckStatus = "pass" | "warning" | "fail" | "skipped";
+
+export interface EditAiImagePayload {
+  source_images: SourceImage[];
+  task_type: ImageEditTaskType;
+  domain?: ImageEditDomain;
+  edit_intent: string;
+  preserve?: string[];
+  change?: string[];
+  avoid?: string[];
+  output_goal?: ImageEditOutputGoal;
+  realism_level?: ImageEditRealismLevel;
+  room_type?: string | null;
+  decor_style?: string | null;
+  model?: string | null;
+  n?: number;
+  size?: string | null;
+  quality?: string | null;
+  style?: string | null;
+  response_format?: string | null;
+  save_to_assets?: boolean;
+}
+
+export interface ImageEditSpec {
+  source_images: SourceImage[];
+  task_type: ImageEditTaskType;
+  domain: ImageEditDomain;
+  edit_intent: string;
+  preserve: string[];
+  change: string[];
+  avoid: string[];
+  output_goal: ImageEditOutputGoal;
+  realism_level: ImageEditRealismLevel;
+  room_type?: string | null;
+  decor_style?: string | null;
+}
+
+export interface ImageEditPlanStep {
+  step: number;
+  name: string;
+  instruction: string;
+}
+
+export interface ImageEditPlan {
+  layout_policy: string;
+  style_policy: string;
+  material_policy: string;
+  lighting_policy: string;
+  composition_policy: string;
+  steps: ImageEditPlanStep[];
+}
+
+export interface ImageEditCompiledPrompts {
+  positive_prompt: string;
+  negative_prompt: string;
+  compiler_version: string;
+}
+
+export interface ImageEditResultAsset {
+  url: string;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface ImageEditQualityCheckItem {
+  name: string;
+  status: ImageEditCheckStatus;
+  message: string;
+}
+
+export interface ImageEditQualityReport {
+  passed: boolean;
+  checks: ImageEditQualityCheckItem[];
+}
+
+export interface ImageEditProvenance {
+  model_config_id?: number | null;
+  model_name?: string | null;
+  created_at: string;
+  knowledge_base?: string | null;
+  prompt_compiler: string;
+}
+
+export interface ImageEditReport {
+  file_name: string;
+  file_path: string;
+  download_url: string;
+}
+
+export interface ImageGenerationArtifact {
+  request_id: string;
+  status: ImageEditArtifactStatus;
+  source_images: SourceImage[];
+  normalized_spec?: ImageEditSpec | null;
+  edit_plan?: ImageEditPlan | null;
+  compiled_prompts?: ImageEditCompiledPrompts | null;
+  result_assets: ImageEditResultAsset[];
+  quality_report?: ImageEditQualityReport | null;
+  provenance: ImageEditProvenance;
+  report?: ImageEditReport | null;
+  errors: string[];
 }

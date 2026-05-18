@@ -11,6 +11,55 @@ from backend.app.core.time import shanghai_now
 
 
 DEFAULT_TEXT_MODEL_NAME = "gpt-5.4"
+MODEL_CAPABILITY_TEXT_GENERATION = "text_generation"
+MODEL_CAPABILITY_VISION = "vision"
+MODEL_CAPABILITY_IMAGE_GENERATION = "image_generation"
+MODEL_CAPABILITY_IMAGE_EDIT = "image_edit"
+SUPPORTED_MODEL_CAPABILITIES = (
+    MODEL_CAPABILITY_TEXT_GENERATION,
+    MODEL_CAPABILITY_VISION,
+    MODEL_CAPABILITY_IMAGE_GENERATION,
+    MODEL_CAPABILITY_IMAGE_EDIT,
+)
+
+
+def default_model_capabilities(model_type: str) -> list[str]:
+    if model_type == "image":
+        return [MODEL_CAPABILITY_IMAGE_GENERATION, MODEL_CAPABILITY_IMAGE_EDIT]
+    if model_type == "text":
+        return [MODEL_CAPABILITY_TEXT_GENERATION]
+    return []
+
+
+def normalize_model_capabilities(
+    model_type: str,
+    capabilities: list[str] | None,
+    *,
+    strict: bool = True,
+) -> list[str]:
+    if capabilities is None:
+        return default_model_capabilities(model_type)
+
+    normalized: list[str] = []
+    for item in capabilities:
+        capability = item.strip() if isinstance(item, str) else ""
+        if not capability:
+            continue
+        if capability not in SUPPORTED_MODEL_CAPABILITIES:
+            if strict:
+                raise ValueError(f"Unsupported model capability: {capability}")
+            continue
+        if capability not in normalized:
+            normalized.append(capability)
+    return normalized or default_model_capabilities(model_type)
+
+
+def model_has_capability(config: "ModelConfig", capability: str) -> bool:
+    return capability in normalize_model_capabilities(
+        getattr(config, "model_type", ""),
+        getattr(config, "capabilities", None),
+        strict=False,
+    )
 
 
 class ModelConfig(Base):
@@ -25,6 +74,7 @@ class ModelConfig(Base):
     base_url: Mapped[str] = mapped_column(Text, default="")
     encrypted_api_key: Mapped[str] = mapped_column(Text, default="")
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    capabilities: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
 
 
 class AiDraft(Base):

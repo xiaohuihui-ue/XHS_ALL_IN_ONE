@@ -37,6 +37,8 @@ class ResizeImageRequest(BaseModel):
 def _export_media_type(file_name: str) -> str:
     if file_name.endswith(".csv"):
         return "text/csv; charset=utf-8"
+    if file_name.endswith(".html"):
+        return "text/html; charset=utf-8"
     return "application/json"
 
 
@@ -161,7 +163,11 @@ def download_export(file_name: str, current_user: User = Depends(get_current_use
     if Path(file_name).name != file_name or ".." in file_name:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export file not found")
 
-    owner_prefixes = (f"xhs-notes-u{current_user.id}-", f"xhs-report-u{current_user.id}-")
+    owner_prefixes = (
+        f"xhs-notes-u{current_user.id}-",
+        f"xhs-report-u{current_user.id}-",
+        f"xhs-image-report-u{current_user.id}-",
+    )
     if not file_name.startswith(owner_prefixes):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export file not found")
 

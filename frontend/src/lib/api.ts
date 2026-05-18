@@ -78,7 +78,13 @@ import type {
   XhsSearchNote,
   XhsQrLoginSession,
   AgentDraftPayload,
-  AgentDraftBatchResult
+  AgentDraftBatchResult,
+  ConfirmXhsAgentRunPayload,
+  ConfirmXhsAgentRunResult,
+  EditAiImagePayload,
+  ImageGenerationArtifact,
+  XhsAgentRunPayload,
+  XhsAgentRunResult
 } from "../types";
 import { withRetry } from "./retry";
 
@@ -364,8 +370,17 @@ export async function exportSavedNotes(payload: NotesExportPayload): Promise<Not
   return response.data;
 }
 
+function exportDownloadUrlToEndpoint(downloadUrl: string): string {
+  return downloadUrl.startsWith("/api") ? downloadUrl.slice(4) : downloadUrl;
+}
+
+export async function fetchExportFileText(downloadUrl: string): Promise<string> {
+  const response = await http.get<string>(exportDownloadUrlToEndpoint(downloadUrl), { responseType: "text" });
+  return response.data;
+}
+
 export async function downloadExportFile(downloadUrl: string, fileName: string): Promise<void> {
-  const endpoint = downloadUrl.startsWith("/api") ? downloadUrl.slice(4) : downloadUrl;
+  const endpoint = exportDownloadUrlToEndpoint(downloadUrl);
   const response = await http.get<Blob>(endpoint, { responseType: "blob" });
   const objectUrl = window.URL.createObjectURL(response.data);
   const link = document.createElement("a");
@@ -400,7 +415,7 @@ export async function uploadAssetFile(file: File): Promise<UploadedFile> {
 }
 
 export async function createMediaObjectUrl(downloadUrl: string): Promise<string> {
-  const endpoint = downloadUrl.startsWith("/api") ? downloadUrl.slice(4) : downloadUrl;
+  const endpoint = exportDownloadUrlToEndpoint(downloadUrl);
   const response = await http.get<Blob>(endpoint, { responseType: "blob" });
   return window.URL.createObjectURL(response.data);
 }
@@ -584,6 +599,11 @@ export async function generateImageWithAi(payload: GenerateImagePayload): Promis
     const response = await http.post<GenerateImageResult>("/ai/images/generate", payload, { timeout: 180000 });
     return response.data;
   });
+}
+
+export async function editImageWithAi(payload: EditAiImagePayload): Promise<ImageGenerationArtifact> {
+  const response = await http.post<ImageGenerationArtifact>("/ai/images/edit", payload, { timeout: 600000 });
+  return response.data;
 }
 
 export async function fetchUserImages(): Promise<{ items: UserImageFile[] }> {
@@ -910,4 +930,22 @@ export async function generateAgentDrafts(
     choices: Array<{ message: { content: string } }>;
   }>("/ai/agent-drafts/chat/completions", payload, timeout !== undefined ? { timeout } : undefined);
   return JSON.parse(res.data.choices[0].message.content) as Record<string, unknown>;
+}
+
+export async function createXhsAgentRun(payload: XhsAgentRunPayload): Promise<XhsAgentRunResult> {
+  const response = await http.post<XhsAgentRunResult>("/xhs/agent/runs", payload, { timeout: 600000 });
+  return response.data;
+}
+
+export async function getXhsAgentRun(runId: number): Promise<XhsAgentRunResult> {
+  const response = await http.get<XhsAgentRunResult>(`/xhs/agent/runs/${runId}`);
+  return response.data;
+}
+
+export async function confirmXhsAgentRun(
+  runId: number,
+  payload: ConfirmXhsAgentRunPayload,
+): Promise<ConfirmXhsAgentRunResult> {
+  const response = await http.post<ConfirmXhsAgentRunResult>(`/xhs/agent/runs/${runId}/confirm`, payload);
+  return response.data;
 }

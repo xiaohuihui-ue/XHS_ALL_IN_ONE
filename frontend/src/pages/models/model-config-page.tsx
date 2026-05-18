@@ -43,9 +43,10 @@ import {
   testModelConfig,
   updateModelConfig,
 } from "../../lib/api";
-import type { ModelConfig, ModelConfigPayload, ModelType } from "../../types";
+import type { ModelCapability, ModelConfig, ModelConfigPayload, ModelType } from "../../types";
 import {
   createModelConfigBackupFileName,
+  defaultModelCapabilities,
   modelConfigBackupToJson,
   normalizeModelConfigBackup,
 } from "./model-config-json";
@@ -60,7 +61,35 @@ const emptyForm: ModelConfigPayload = {
   base_url: "",
   api_key: "",
   is_default: true,
+  capabilities: ["text_generation"],
 };
+
+const capabilityOptions: Record<ModelType, { label: string; value: ModelCapability }[]> = {
+  text: [
+    { label: "文本生成", value: "text_generation" },
+    { label: "视觉理解", value: "vision" },
+  ],
+  image: [
+    { label: "文生图", value: "image_generation" },
+    { label: "图生图/改图", value: "image_edit" },
+  ],
+};
+
+const capabilityLabels: Record<ModelCapability, string> = {
+  text_generation: "文本生成",
+  vision: "视觉理解",
+  image_generation: "文生图",
+  image_edit: "图生图/改图",
+};
+
+function emptyFormForType(type: ModelType): ModelConfigPayload {
+  return {
+    ...emptyForm,
+    model_type: type,
+    model_name: defaultModelName(type),
+    capabilities: defaultModelCapabilities(type),
+  };
+}
 
 function defaultModelName(type: ModelType): string {
   return type === "text" ? "gpt-5.4" : "";
@@ -128,6 +157,7 @@ export function ModelConfigPage() {
       provider: form.provider.trim(),
       base_url: form.base_url.trim(),
       api_key: form.api_key.trim(),
+      capabilities: form.capabilities.length > 0 ? form.capabilities : defaultModelCapabilities(form.model_type),
     };
     try {
       if (editingId) {
@@ -145,7 +175,7 @@ export function ModelConfigPage() {
         });
         setMessage(`${typeLabel(created.model_type)}配置已保存。`);
       }
-      setForm({ ...emptyForm, model_type: form.model_type });
+      setForm(emptyFormForType(form.model_type));
     } catch {
       setError("模型配置保存失败。");
     } finally {
@@ -163,6 +193,7 @@ export function ModelConfigPage() {
       base_url: config.base_url,
       api_key: "",
       is_default: config.is_default,
+      capabilities: config.capabilities ?? defaultModelCapabilities(config.model_type),
     });
     setMessage(null);
     setError(null);
@@ -170,7 +201,7 @@ export function ModelConfigPage() {
 
   function handleCancelEdit() {
     setEditingId(null);
-    setForm({ ...emptyForm, model_type: form.model_type });
+    setForm(emptyFormForType(form.model_type));
   }
 
   async function handleExportJson() {
@@ -212,7 +243,7 @@ export function ModelConfigPage() {
       const configs = normalizeModelConfigBackup(JSON.parse(await file.text()));
       const result = await importModelConfigs({ version: 1, configs });
       setEditingId(null);
-      setForm({ ...emptyForm, model_type: form.model_type });
+      setForm(emptyFormForType(form.model_type));
       await loadConfigs();
       setMessage(`JSON 已导入：新增 ${result.created_count} 个，更新 ${result.updated_count} 个。`);
     } catch (err) {
@@ -228,7 +259,7 @@ export function ModelConfigPage() {
     try {
       await deleteModelConfig(configId);
       setConfigs((current) => current.filter((c) => c.id !== configId));
-      if (editingId === configId) { setEditingId(null); setForm({ ...emptyForm, model_type: form.model_type }); }
+      if (editingId === configId) { setEditingId(null); setForm(emptyFormForType(form.model_type)); }
       setMessage("配置已删除。");
     } catch {
       setError("配置删除失败。");
@@ -368,6 +399,7 @@ export function ModelConfigPage() {
                   ...current,
                   model_type: val as ModelType,
                   model_name: defaultModelName(val as ModelType),
+                  capabilities: defaultModelCapabilities(val as ModelType),
                 }))
               }
               block
@@ -389,6 +421,18 @@ export function ModelConfigPage() {
                   />
                 </Form.Item>
                 <Alert message="所有模型需兼容 OpenAI 接口规范" type="info" style={{ marginBottom: 16, fontSize: 12 }} />
+                <Form.Item label="模型能力">
+                  <Checkbox.Group
+                    value={form.capabilities}
+                    options={capabilityOptions[form.model_type]}
+                    onChange={(values) =>
+                      setForm((current) => ({
+                        ...current,
+                        capabilities: values as ModelCapability[],
+                      }))
+                    }
+                  />
+                </Form.Item>
                 <Form.Item label="模型名称">
                   <Input
                     value={form.model_name}
@@ -520,6 +564,13 @@ export function ModelConfigPage() {
                           <div style={{ marginTop: 4, marginBottom: 4 }}>
                             <Text>{config.model_name || "未填写模型名称"}</Text>
                           </div>
+                          <Space size={4} wrap style={{ marginTop: 4 }}>
+                            {(config.capabilities ?? defaultModelCapabilities(config.model_type)).map((capability) => (
+                              <Tag key={capability} color={capability === "vision" || capability === "image_edit" ? "purple" : "green"}>
+                                {capabilityLabels[capability] ?? capability}
+                              </Tag>
+                            ))}
+                          </Space>
                           <div
                             style={{
                               marginTop: 8,

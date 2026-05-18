@@ -48,6 +48,7 @@ export type ImagesStep = {
   status: "running" | "retrying" | "done" | "error";
   retryCount?: number;
   assets?: AgentDraftItem["assets"];
+  final_image_prompt?: string;
   iteration_history?: IterationRound[];
   image_quality_check?: ImageQualityCheck;
   errors?: string[];
@@ -55,6 +56,31 @@ export type ImagesStep = {
 };
 
 export type WorkflowStep = TitlesStep | DraftStep | ImagesStep;
+
+function qualityCheckTag(check: ImageQualityCheck) {
+  if (check.vision_check_status === "skipped") {
+    return (
+      <Tag color="orange" style={{ fontSize: 11 }}>
+        图片质检：未执行 — {check.vision_check_message || check.retry_reason || "缺少视觉模型"}
+      </Tag>
+    );
+  }
+  if (check.vision_check_status === "failed") {
+    return (
+      <Tag color="orange" style={{ fontSize: 11 }}>
+        图片质检：未完成 — {check.vision_check_message || check.retry_reason || "质检调用失败"}
+      </Tag>
+    );
+  }
+  if (check.need_retry) {
+    return (
+      <Tag color="red" style={{ fontSize: 11 }}>
+        图片质检：需重试 — {check.retry_reason || "质量问题"}
+      </Tag>
+    );
+  }
+  return <Tag color="green" style={{ fontSize: 11 }}>图片质检：通过</Tag>;
+}
 
 function IterationBadge({ round }: { round: IterationRound }) {
   const score = round.prompt_quality_score.overall_score;
@@ -171,6 +197,16 @@ export function DraftStepCard({ step }: { step: WorkflowStep }) {
       {step.type === "images" && (
         <div>
           {/* Iteration history */}
+          {step.final_image_prompt && (
+            <Paragraph
+              ellipsis={{ rows: 2, expandable: true, symbol: "展开" }}
+              style={{ fontSize: 11, color: "rgba(255,255,255,0.62)", margin: "4px 0" }}
+            >
+              最终生图提示词：{step.final_image_prompt}
+            </Paragraph>
+          )}
+
+          {/* Iteration history */}
           {step.iteration_history && step.iteration_history.length > 0 && (
             <Space wrap style={{ marginTop: 4 }}>
               {step.iteration_history.map((r) => (
@@ -182,13 +218,7 @@ export function DraftStepCard({ step }: { step: WorkflowStep }) {
           {/* Image quality check */}
           {step.image_quality_check && (
             <div style={{ marginTop: 4 }}>
-              {step.image_quality_check.need_retry ? (
-                <Tag color="red" style={{ fontSize: 11 }}>
-                  图片质检：需重试 — {step.image_quality_check.retry_reason || "质量问题"}
-                </Tag>
-              ) : (
-                <Tag color="green" style={{ fontSize: 11 }}>图片质检：通过</Tag>
-              )}
+              {qualityCheckTag(step.image_quality_check)}
             </div>
           )}
 

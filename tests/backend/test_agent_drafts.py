@@ -5,10 +5,13 @@ from backend.app.services.ai_service import OpenAICompatibleTextClient
 from backend.app.models import ModelConfig
 
 
-def _make_model_config(base_url="http://fake-llm", model_name="gpt-test"):
+def _make_model_config(base_url="http://fake-llm", model_name="gpt-test", capabilities=None):
     cfg = ModelConfig()
+    cfg.model_type = "text"
     cfg.base_url = base_url
     cfg.model_name = model_name
+    if capabilities is not None:
+        cfg.capabilities = capabilities
     return cfg
 
 
@@ -39,7 +42,7 @@ def _mock_response(json_body, status_code=200):
 def test_generate_agent_drafts_pass1_success():
     """Pass 1 succeeds when provider returns valid JSON content."""
     client = OpenAICompatibleTextClient()
-    cfg = _make_model_config()
+    cfg = _make_model_config(capabilities=["text_generation", "vision"])
     messages = [{"role": "user", "content": "Generate 1 draft."}]
 
     api_response = {
@@ -362,6 +365,40 @@ def test_agent_drafts_missing_image_model_when_images_requested(tmp_path):
         _cleanup(engine, SessionLocal)
 
 
+def test_agent_drafts_full_batch_passes_image_options_to_image_client(tmp_path):
+    text_client = MagicMock()
+    text_client.generate_agent_drafts.return_value = _TEXT_CLIENT_RESPONSE
+
+    image_client = MagicMock()
+    image_client.generate_image.return_value = {"url": "data:image/png;base64,abc"}
+
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=True, text_client=text_client, image_client=image_client
+    )
+    try:
+        request = {
+            **_VALID_REQUEST,
+            "image_options": {
+                "n": 1,
+                "size": "1792x1024",
+                "quality": "hd",
+                "style": "natural",
+                "response_format": "b64_json",
+            },
+        }
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json=request)
+        assert response.status_code == 200
+        image_client.generate_image.assert_called_once()
+        call_kwargs = image_client.generate_image.call_args.kwargs
+        assert call_kwargs["size"] == "1792x1024"
+        assert call_kwargs["quality"] == "hd"
+        assert call_kwargs["style"] == "natural"
+        assert call_kwargs["response_format"] == "b64_json"
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
 # ---------------------------------------------------------------------------
 # Tests for enhanced draft titles (step=titles returns topics)
 # ---------------------------------------------------------------------------
@@ -668,6 +705,65 @@ def test_check_generated_image_quality_returns_structured_result():
     assert result["is_xiaohongshu_cover_ready"] is True
 
 
+def test_check_generated_image_quality_skips_when_model_lacks_vision_capability():
+    """A configured text model without vision capability must not call the vision request."""
+    from backend.app.services.ai_service import OpenAICompatibleImageClient
+    client = OpenAICompatibleImageClient()
+    cfg = _make_model_config(capabilities=["text_generation"])
+
+    with patch("requests.post") as post_mock:
+        result = client._check_generated_image_quality(
+            image_url="https://example.com/img.png",
+            topic="奶油风客厅",
+            text_model_config=cfg,
+            text_api_key="sk-test",
+        )
+
+    assert result["need_retry"] is False
+    assert result["vision_check_status"] == "skipped"
+    assert "vision" in result["vision_check_message"]
+    post_mock.assert_not_called()
+
+
+def test_check_generated_image_quality_marks_unchecked_when_vision_model_unavailable():
+    """Missing text/vision config should be visible instead of silently looking passed."""
+    from backend.app.services.ai_service import OpenAICompatibleImageClient
+    client = OpenAICompatibleImageClient()
+    cfg = _make_model_config(base_url="", model_name="", capabilities=["text_generation", "vision"])
+
+    result = client._check_generated_image_quality(
+        image_url="https://example.com/img.png",
+        topic="奶油风客厅",
+        text_model_config=cfg,
+        text_api_key="",
+    )
+
+    assert result["need_retry"] is False
+    assert result["vision_check_status"] == "skipped"
+    assert "未执行视觉质检" in result["vision_check_message"]
+    assert "未执行视觉质检" in result["retry_reason"]
+
+
+def test_check_generated_image_quality_marks_failed_when_vision_call_errors():
+    """Vision API errors should be explicit in the returned quality metadata."""
+    from backend.app.services.ai_service import OpenAICompatibleImageClient
+    client = OpenAICompatibleImageClient()
+    cfg = _make_model_config(base_url="http://fake-llm", model_name="gpt-vision", capabilities=["text_generation", "vision"])
+
+    with patch("requests.post", side_effect=RuntimeError("vision model does not support image_url")):
+        result = client._check_generated_image_quality(
+            image_url="https://example.com/img.png",
+            topic="奶油风客厅",
+            text_model_config=cfg,
+            text_api_key="sk-test",
+        )
+
+    assert result["need_retry"] is False
+    assert result["vision_check_status"] == "failed"
+    assert "未完成视觉质检" in result["vision_check_message"]
+    assert "vision model does not support image_url" in result["retry_reason"]
+
+
 # ---------------------------------------------------------------------------
 # Tests for generate_image_with_retry
 # ---------------------------------------------------------------------------
@@ -678,7 +774,7 @@ def test_generate_image_with_retry_skips_retry_when_pass():
     client = OpenAICompatibleImageClient()
 
     img_cfg = _make_model_config(base_url="http://fake-img", model_name="dall-e")
-    txt_cfg = _make_model_config(base_url="http://fake-llm", model_name="gpt-vision")
+    txt_cfg = _make_model_config(base_url="http://fake-llm", model_name="gpt-vision", capabilities=["text_generation", "vision"])
 
     quality_pass = {
         "choices": [{
@@ -740,7 +836,7 @@ def test_generate_image_with_retry_retries_on_failure():
     client = OpenAICompatibleImageClient()
 
     img_cfg = _make_model_config(base_url="http://fake-img", model_name="dall-e")
-    txt_cfg = _make_model_config(base_url="http://fake-llm", model_name="gpt-vision")
+    txt_cfg = _make_model_config(base_url="http://fake-llm", model_name="gpt-vision", capabilities=["text_generation", "vision"])
 
     quality_fail = {
         "choices": [{
@@ -867,6 +963,66 @@ def test_step_draft_returns_cover_strategy_and_publish_tips(tmp_path):
         assert "image_prompt_spec" in content
         assert "publish_tips" in content
         assert content["cover_strategy"]["cover_type"] == "特写"
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
+def test_step_images_returns_final_prompt_and_passes_image_options(tmp_path):
+    """step=images returns final_image_prompt and forwards image options into retry generation."""
+    text_client = MagicMock()
+    text_client.iterate_image_prompt.return_value = {
+        "final_image_prompt": "final cozy living room prompt",
+        "iteration_history": [],
+        "total_rounds": 1,
+    }
+    image_client = MagicMock()
+    image_client.generate_image_with_retry.return_value = {
+        "url": "data:image/png;base64,abc",
+        "iteration_history": [],
+        "quality_check": {"need_retry": False},
+        "final_image_prompt": "final cozy living room prompt",
+    }
+
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=True, text_client=text_client, image_client=image_client
+    )
+    try:
+        db = SessionLocal()
+        user = db.query(User).first()
+        from backend.app.models import AiDraft
+
+        draft = AiDraft(user_id=user.id, platform="xhs", title="奶油风客厅", body="正文")
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+        db.close()
+
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json={
+            "messages": [{"role": "user", "content": "generate images"}],
+            "step": "images",
+            "draft_id": draft.id,
+            "cover_strategy": {"cover_goal": "吸引点击"},
+            "image_prompt_spec": {"L1_publish_goal": "室内设计"},
+            "draft_body": "正文",
+            "metadata": {"platform": "xhs"},
+            "image_options": {
+                "n": 1,
+                "size": "1792x1024",
+                "quality": "hd",
+                "style": "natural",
+                "response_format": "b64_json",
+            },
+        })
+        assert response.status_code == 200
+        content = json.loads(response.json()["choices"][0]["message"]["content"])
+        assert content["final_image_prompt"] == "final cozy living room prompt"
+        image_client.generate_image_with_retry.assert_called_once()
+        call_kwargs = image_client.generate_image_with_retry.call_args.kwargs
+        assert call_kwargs["size"] == "1792x1024"
+        assert call_kwargs["quality"] == "hd"
+        assert call_kwargs["style"] == "natural"
+        assert call_kwargs["response_format"] == "b64_json"
     finally:
         _cleanup(engine, SessionLocal)
 

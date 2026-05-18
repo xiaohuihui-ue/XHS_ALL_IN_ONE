@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_user
 from backend.app.core.security import decrypt_text, encrypt_text
-from backend.app.models import DEFAULT_TEXT_MODEL_NAME, ModelConfig, User
+from backend.app.models import DEFAULT_TEXT_MODEL_NAME, SUPPORTED_MODEL_CAPABILITIES, ModelConfig, User, normalize_model_capabilities
 from backend.app.schemas.common import paginated
 
 router = APIRouter(prefix="/model-configs", tags=["model-configs"])
@@ -24,6 +24,17 @@ class ModelConfigCreateRequest(BaseModel):
     base_url: str = ""
     api_key: str = ""
     is_default: bool = False
+    capabilities: list[str] | None = Field(default=None, max_length=8)
+
+    @field_validator("capabilities")
+    @classmethod
+    def validate_capabilities(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        unsupported = [item for item in value if item not in SUPPORTED_MODEL_CAPABILITIES]
+        if unsupported:
+            raise ValueError(f"Unsupported capabilities: {', '.join(unsupported)}")
+        return value
 
 
 class ModelConfigUpdateRequest(BaseModel):
@@ -33,6 +44,17 @@ class ModelConfigUpdateRequest(BaseModel):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     is_default: Optional[bool] = None
+    capabilities: Optional[list[str]] = Field(default=None, max_length=8)
+
+    @field_validator("capabilities")
+    @classmethod
+    def validate_capabilities(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        unsupported = [item for item in value if item not in SUPPORTED_MODEL_CAPABILITIES]
+        if unsupported:
+            raise ValueError(f"Unsupported capabilities: {', '.join(unsupported)}")
+        return value
 
 
 class ModelConfigImportRequest(BaseModel):
@@ -50,6 +72,7 @@ def _serialize_config(config: ModelConfig) -> dict:
         "base_url": config.base_url,
         "has_api_key": bool(config.encrypted_api_key),
         "is_default": config.is_default,
+        "capabilities": normalize_model_capabilities(config.model_type, config.capabilities, strict=False),
     }
 
 
@@ -66,6 +89,7 @@ def _serialize_export_config(config: ModelConfig) -> dict:
         "base_url": config.base_url,
         "api_key": api_key,
         "is_default": config.is_default,
+        "capabilities": normalize_model_capabilities(config.model_type, config.capabilities, strict=False),
     }
 
 
@@ -142,6 +166,7 @@ def import_model_configs(
         model_name = _normalize_model_name(item.model_type, item.model_name)
         base_url = item.base_url.strip()
         api_key = item.api_key.strip()
+        capabilities = normalize_model_capabilities(item.model_type, item.capabilities)
 
         config = db.scalar(
             select(ModelConfig)
@@ -165,6 +190,7 @@ def import_model_configs(
                 base_url=base_url,
                 encrypted_api_key=encrypt_text(api_key) if api_key else "",
                 is_default=item.is_default,
+                capabilities=capabilities,
             )
             db.add(config)
             created_count += 1
@@ -174,6 +200,7 @@ def import_model_configs(
             config.base_url = base_url
             config.encrypted_api_key = encrypt_text(api_key) if api_key else ""
             config.is_default = item.is_default
+            config.capabilities = capabilities
             updated_count += 1
         imported_configs.append(config)
 
@@ -207,6 +234,7 @@ def create_model_config(
         base_url=payload.base_url,
         encrypted_api_key=encrypt_text(payload.api_key) if payload.api_key else "",
         is_default=payload.is_default,
+        capabilities=normalize_model_capabilities(payload.model_type, payload.capabilities),
     )
     db.add(config)
     db.commit()
@@ -284,6 +312,8 @@ def update_model_config(
         if payload.is_default:
             _clear_default_for_type(db, current_user.id, config.model_type)
         config.is_default = payload.is_default
+    if payload.capabilities is not None:
+        config.capabilities = normalize_model_capabilities(config.model_type, payload.capabilities)
 
     db.commit()
     db.refresh(config)

@@ -15,6 +15,7 @@ const textConfig = {
   base_url: "https://api.example.com/v1",
   api_key: "sk-local-test",
   is_default: true,
+  capabilities: ["text_generation", "vision"],
 };
 
 const imageConfig = {
@@ -25,6 +26,7 @@ const imageConfig = {
   base_url: "https://image.example.com/v1",
   api_key: "sk-image-test",
   is_default: true,
+  capabilities: ["image_generation", "image_edit"],
 };
 
 test("exports all model configs as a versioned JSON backup", () => {
@@ -49,6 +51,7 @@ test("imports a versioned JSON backup into trimmed model config payloads", () =>
         base_url: " https://api.example.com/v1/ ",
         api_key: " sk-imported ",
         is_default: false,
+        capabilities: [" image_generation ", "image_edit", "image_generation"],
       },
       textConfig,
     ],
@@ -63,9 +66,33 @@ test("imports a versioned JSON backup into trimmed model config payloads", () =>
       base_url: "https://api.example.com/v1/",
       api_key: "sk-imported",
       is_default: false,
+      capabilities: ["image_generation", "image_edit"],
     },
     textConfig,
   ]);
+});
+
+test("defaults capabilities for legacy backup files", () => {
+  const { capabilities, ...legacyTextConfig } = textConfig;
+  const { capabilities: _imageCapabilities, ...legacyImageConfig } = imageConfig;
+
+  assert.deepEqual(normalizeModelConfigBackup([legacyTextConfig, legacyImageConfig]), [
+    { ...legacyTextConfig, capabilities: ["text_generation"] },
+    { ...legacyImageConfig, capabilities: ["image_generation", "image_edit"] },
+  ]);
+});
+
+test("rejects JSON with unsupported model capabilities", () => {
+  assert.throws(
+    () =>
+      normalizeModelConfigBackup([
+        {
+          ...textConfig,
+          capabilities: ["text_generation", "audio"],
+        },
+      ]),
+    /capabilities/
+  );
 });
 
 test("accepts a direct array for hand-written JSON backup files", () => {

@@ -1310,8 +1310,8 @@ export function XhsDraftsPage() {
             </Form.Item>
             <Form.Item label="每篇图片数">
               <InputNumber
-                min={3}
-                max={5}
+                min={0}
+                max={3}
                 value={imagesPerDraft}
                 onChange={(v) => setImagesPerDraft(v ?? 0)}
                 style={{ width: 80 }}

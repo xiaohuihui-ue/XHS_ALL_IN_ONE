@@ -8,11 +8,9 @@ import requests
 from pydantic import BaseModel, Field
 from unittest.mock import MagicMock
 
-from backend.app.models import ModelConfig
+from backend.app.models import MODEL_CAPABILITY_VISION, ModelConfig, model_has_capability
 from backend.app.services.http_logging import ai_http_log, set_current_task_id
 from backend.app.models.ai_http_log import RequestType
-
-from backend.app.models import ModelConfig
 
 
 # ----------------------------------------------------------------------
@@ -57,6 +55,8 @@ class ImageQualityCheck(BaseModel):
     has_title_space: bool = True
     need_retry: bool = False
     retry_reason: str = ""
+    vision_check_status: str = "checked"
+    vision_check_message: str = "视觉质检已完成"
 
 
 class IterationRound(BaseModel):
@@ -203,6 +203,10 @@ class ImageAiClient(Protocol):
         api_key: str,
         prompt: str,
         reference_images: list[str] | None = None,
+        size: str | None = None,
+        quality: str | None = None,
+        style: str | None = None,
+        response_format: str | None = None,
     ) -> dict[str, Any]:
         ...
 
@@ -227,6 +231,10 @@ class ImageAiClient(Protocol):
         text_api_key: str,
         topic: str,
         max_retries: int = 2,
+        size: str | None = None,
+        quality: str | None = None,
+        style: str | None = None,
+        response_format: str | None = None,
     ) -> dict:
         """
         Generate an image, check quality, and retry on failure.
@@ -937,14 +945,24 @@ class OpenAICompatibleImageClient:
         api_key: str,
         prompt: str,
         reference_images: list[str] | None = None,
+        size: str | None = None,
+        quality: str | None = None,
+        style: str | None = None,
+        response_format: str | None = None,
     ) -> dict[str, Any]:
         self._validate(model_config=model_config, api_key=api_key)
         endpoint = f"{model_config.base_url.rstrip('/')}/images/generations"
         body: dict[str, Any] = {
             "model": model_config.model_name,
             "prompt": prompt,
-            "response_format": "url",
+            "response_format": response_format or "url",
         }
+        if size:
+            body["size"] = size
+        if quality:
+            body["quality"] = quality
+        if style:
+            body["style"] = style
         if reference_images:
             resolved = [self._resolve_image_ref(url) for url in reference_images]
             if len(resolved) == 1:
@@ -1105,8 +1123,8 @@ class OpenAICompatibleImageClient:
         Use a vision-capable text model to check generated image quality.
         Returns an ImageQualityCheck dict.
         """
-        if not text_model_config.base_url or not text_model_config.model_name or not text_api_key:
-            # Cannot check: return default pass
+        if not model_has_capability(text_model_config, MODEL_CAPABILITY_VISION):
+            message = "未执行视觉质检：当前文本模型未声明 vision 能力。"
             return ImageQualityCheck(
                 is_relevant_to_topic=True,
                 has_text_or_garbled_text=False,
@@ -1117,7 +1135,26 @@ class OpenAICompatibleImageClient:
                 is_xiaohongshu_cover_ready=True,
                 has_title_space=True,
                 need_retry=False,
-                retry_reason="",
+                retry_reason=message,
+                vision_check_status="skipped",
+                vision_check_message=message,
+            ).model_dump()
+
+        if not text_model_config.base_url or not text_model_config.model_name or not text_api_key:
+            message = "未执行视觉质检：未配置可用的视觉模型或 API Key。"
+            return ImageQualityCheck(
+                is_relevant_to_topic=True,
+                has_text_or_garbled_text=False,
+                has_logo_or_watermark=False,
+                has_qrcode=False,
+                has_sensitive_content=False,
+                has_deformed_face_or_hands=False,
+                is_xiaohongshu_cover_ready=True,
+                has_title_space=True,
+                need_retry=False,
+                retry_reason=message,
+                vision_check_status="skipped",
+                vision_check_message=message,
             ).model_dump()
 
         endpoint = f"{text_model_config.base_url.rstrip('/')}/chat/completions"
@@ -1164,9 +1201,14 @@ class OpenAICompatibleImageClient:
             stripped = re.sub(r"^```(?:json)?\s*\n?", "", re.sub(r"\n?```\s*$", "", content.strip()))
             data = json.loads(stripped)
             return ImageQualityCheck(**data).model_dump()
-        except Exception:
-            # Quality check failed: default to no retry
-            return ImageQualityCheck(need_retry=False, retry_reason="质检接口异常，默认通过").model_dump()
+        except Exception as exc:
+            message = f"未完成视觉质检：{exc}"
+            return ImageQualityCheck(
+                need_retry=False,
+                retry_reason=message,
+                vision_check_status="failed",
+                vision_check_message=message,
+            ).model_dump()
 
     def generate_image_with_retry(
         self,
@@ -1179,6 +1221,10 @@ class OpenAICompatibleImageClient:
         text_api_key: str,
         topic: str,
         max_retries: int = 2,
+        size: str | None = None,
+        quality: str | None = None,
+        style: str | None = None,
+        response_format: str | None = None,
     ) -> dict:
         """
         Generate image, check quality, retry on failure.
@@ -1203,6 +1249,10 @@ class OpenAICompatibleImageClient:
                 api_key=image_api_key,
                 prompt=current_prompt,
                 reference_images=reference_images,
+                size=size,
+                quality=quality,
+                style=style,
+                response_format=response_format,
             )
             image_url = img_result.get("url") or ""
 
@@ -1246,4 +1296,5 @@ class OpenAICompatibleImageClient:
             "url": final_url,
             "iteration_history": iteration_history,
             "quality_check": final_check,
+            "final_image_prompt": current_prompt,
         }

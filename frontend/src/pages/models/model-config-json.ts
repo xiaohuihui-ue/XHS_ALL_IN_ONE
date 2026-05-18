@@ -1,4 +1,4 @@
-import type { ModelConfigPayload, ModelType } from "../../types";
+import type { ModelCapability, ModelConfigPayload, ModelType } from "../../types";
 
 export type ModelConfigBackup = {
   version: 1;
@@ -6,6 +6,11 @@ export type ModelConfigBackup = {
 };
 
 const validModelTypes: ModelType[] = ["text", "image"];
+const validCapabilities: ModelCapability[] = ["text_generation", "vision", "image_generation", "image_edit"];
+
+export function defaultModelCapabilities(type: ModelType): ModelCapability[] {
+  return type === "image" ? ["image_generation", "image_edit"] : ["text_generation"];
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -35,18 +40,44 @@ function readBoolean(source: Record<string, unknown>, field: keyof ModelConfigPa
   return value;
 }
 
+function readCapabilities(source: Record<string, unknown>, modelType: ModelType): ModelCapability[] {
+  const value = source.capabilities;
+  if (value === undefined) {
+    return defaultModelCapabilities(modelType);
+  }
+  if (!Array.isArray(value)) {
+    throw new Error("capabilities must be an array");
+  }
+  const normalized: ModelCapability[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") {
+      throw new Error("capabilities must contain strings");
+    }
+    const capability = raw.trim() as ModelCapability;
+    if (!validCapabilities.includes(capability)) {
+      throw new Error(`capabilities contains unsupported value: ${capability}`);
+    }
+    if (!normalized.includes(capability)) {
+      normalized.push(capability);
+    }
+  }
+  return normalized.length > 0 ? normalized : defaultModelCapabilities(modelType);
+}
+
 function normalizeModelConfigPayload(raw: unknown): ModelConfigPayload {
   if (!isRecord(raw)) {
     throw new Error("config must be an object");
   }
+  const modelType = readModelType(raw);
   return {
     name: readString(raw, "name"),
-    model_type: readModelType(raw),
+    model_type: modelType,
     provider: readString(raw, "provider"),
     model_name: readString(raw, "model_name"),
     base_url: readString(raw, "base_url"),
     api_key: readString(raw, "api_key"),
     is_default: readBoolean(raw, "is_default"),
+    capabilities: readCapabilities(raw, modelType),
   };
 }
 

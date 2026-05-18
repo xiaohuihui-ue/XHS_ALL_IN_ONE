@@ -58,6 +58,7 @@ export interface ImagesStep {
   status: "running" | "retrying" | "done" | "error";
   retryCount?: number;
   assets?: AgentDraftItem["assets"];
+  final_image_prompt?: string;
   iteration_history?: IterationRound[];
   image_quality_check?: ImageQualityCheck;
   errors?: string[];
@@ -305,6 +306,7 @@ export function useDraftGeneration() {
           title,
           status: "done",
           assets: (res.assets as AgentDraftItem["assets"]) ?? [],
+          final_image_prompt: (res.final_image_prompt as string | undefined) ?? undefined,
           iteration_history: (res.iteration_history as IterationRound[]) ?? [],
           image_quality_check: (res.quality_check as ImageQualityCheck) ?? undefined,
           errors: (res.errors as string[] | undefined) ?? [],

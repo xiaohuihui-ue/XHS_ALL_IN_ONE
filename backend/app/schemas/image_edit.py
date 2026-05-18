@@ -60,7 +60,7 @@ class SourceImage(BaseModel):
 
 
 class ImageEditSpec(BaseModel):
-    source_images: list[SourceImage]
+    source_images: list[SourceImage] = Field(min_length=1)
     task_type: TaskType
     domain: Domain = Domain.general
     edit_intent: str = Field(min_length=1, max_length=500)
@@ -145,6 +145,12 @@ class Provenance(BaseModel):
     prompt_compiler: str = "image_prompt_compiler_v1"
 
 
+class ImageReport(BaseModel):
+    file_name: str
+    file_path: str
+    download_url: str
+
+
 class ImageGenerationArtifact(BaseModel):
     request_id: str
     status: ArtifactStatus
@@ -155,4 +161,5 @@ class ImageGenerationArtifact(BaseModel):
     result_assets: list[ResultAsset] = Field(default_factory=list)
     quality_report: QualityReport | None = None
     provenance: Provenance
+    report: ImageReport | None = None
     errors: list[str] = Field(default_factory=list)

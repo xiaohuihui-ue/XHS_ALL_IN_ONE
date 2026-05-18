@@ -323,7 +323,7 @@ def test_auth_register_login_me_and_refresh_use_real_tokens(tmp_path):
     try:
         register_response = client.post(
             "/api/auth/register",
-            json={"username": "operator", "password": "secret123"},
+            json={"username": "operator", "email": "operator@example.com", "password": "secret123"},
         )
         assert register_response.status_code == 200
         registered = register_response.json()
@@ -365,13 +365,13 @@ def test_auth_rejects_duplicate_user_and_bad_credentials(tmp_path):
     try:
         response = client.post(
             "/api/auth/register",
-            json={"username": "operator", "password": "secret123"},
+            json={"username": "operator", "email": "operator@example.com", "password": "secret123"},
         )
         assert response.status_code == 200
 
         duplicate_response = client.post(
             "/api/auth/register",
-            json={"username": "operator", "password": "different123"},
+            json={"username": "operator", "email": "operator-duplicate@example.com", "password": "different123"},
         )
         assert duplicate_response.status_code == 400
 
@@ -461,7 +461,7 @@ class FakePhoneLoginAdapter:
 def _register_and_get_access_token(username: str = "operator") -> str:
     response = client.post(
         "/api/auth/register",
-        json={"username": username, "password": "secret123"},
+        json={"username": username, "email": f"{username}@example.com", "password": "secret123"},
     )
     assert response.status_code == 200
     return response.json()["access_token"]
@@ -3904,6 +3904,7 @@ def test_model_configs_create_list_filter_and_encrypt_api_key(tmp_path):
                 "base_url": "https://api.example.test/v1",
                 "api_key": "sk-secret-text",
                 "is_default": True,
+                "capabilities": ["text_generation", "vision"],
             },
         )
         assert create_response.status_code == 200
@@ -3911,6 +3912,7 @@ def test_model_configs_create_list_filter_and_encrypt_api_key(tmp_path):
         assert created["name"] == "OpenAI Text"
         assert created["model_type"] == "text"
         assert created["model_name"] == "gpt-test"
+        assert created["capabilities"] == ["text_generation", "vision"]
         assert created["has_api_key"] is True
         assert "api_key" not in created
         assert "encrypted_api_key" not in created
@@ -3929,6 +3931,7 @@ def test_model_configs_create_list_filter_and_encrypt_api_key(tmp_path):
             },
         )
         assert image_response.status_code == 200
+        assert image_response.json()["capabilities"] == ["image_generation", "image_edit"]
 
         owner_list_response = client.get(
             "/api/model-configs?model_type=text",
@@ -3939,6 +3942,7 @@ def test_model_configs_create_list_filter_and_encrypt_api_key(tmp_path):
         assert owner_payload["total"] == 1
         assert owner_payload["items"][0]["id"] == created["id"]
         assert owner_payload["items"][0]["model_type"] == "text"
+        assert owner_payload["items"][0]["capabilities"] == ["text_generation", "vision"]
 
         intruder_list_response = client.get(
             "/api/model-configs",
@@ -3952,8 +3956,33 @@ def test_model_configs_create_list_filter_and_encrypt_api_key(tmp_path):
             config = db.query(ModelConfig).filter(ModelConfig.name == "OpenAI Text").one()
             assert config.encrypted_api_key != "sk-secret-text"
             assert decrypt_text(config.encrypted_api_key) == "sk-secret-text"
+            assert config.capabilities == ["text_generation", "vision"]
         finally:
             db.close()
+    finally:
+        app.dependency_overrides.pop(db_dependency, None)
+
+
+def test_model_configs_reject_unknown_capabilities(tmp_path):
+    db_dependency = _override_database(tmp_path)
+    owner_token = _register_model_config_test_token("model-capability-owner")
+    try:
+        response = client.post(
+            "/api/model-configs",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={
+                "name": "Bad Capability",
+                "model_type": "text",
+                "provider": "openai-compatible",
+                "model_name": "gpt-test",
+                "base_url": "https://api.example.test/v1",
+                "api_key": "sk-secret-text",
+                "is_default": True,
+                "capabilities": ["text_generation", "unknown_capability"],
+            },
+        )
+
+        assert response.status_code == 422
     finally:
         app.dependency_overrides.pop(db_dependency, None)
 
@@ -3981,6 +4010,7 @@ def test_model_configs_export_includes_all_owned_configs_with_api_keys(tmp_path)
                 "base_url": "https://api.example.test/v1",
                 "api_key": "sk-secret-text",
                 "is_default": True,
+                "capabilities": ["text_generation", "vision"],
             },
             {
                 "name": "Image Model",
@@ -3990,6 +4020,7 @@ def test_model_configs_export_includes_all_owned_configs_with_api_keys(tmp_path)
                 "base_url": "https://image.example.test/v1",
                 "api_key": "sk-secret-image",
                 "is_default": True,
+                "capabilities": ["image_generation", "image_edit"],
             },
         ]:
             response = client.post(
@@ -4025,7 +4056,9 @@ def test_model_configs_export_includes_all_owned_configs_with_api_keys(tmp_path)
         assert len(exported["configs"]) == 2
         by_name = {item["name"]: item for item in exported["configs"]}
         assert by_name["OpenAI Text"]["api_key"] == "sk-secret-text"
+        assert by_name["OpenAI Text"]["capabilities"] == ["text_generation", "vision"]
         assert by_name["Image Model"]["api_key"] == "sk-secret-image"
+        assert by_name["Image Model"]["capabilities"] == ["image_generation", "image_edit"]
         assert all("id" not in item for item in exported["configs"])
         assert all("encrypted_api_key" not in item for item in exported["configs"])
         assert "Intruder Text" not in by_name
@@ -4070,6 +4103,7 @@ def test_model_configs_import_upserts_all_configs_and_encrypts_api_keys(tmp_path
                         "base_url": "https://api.example.test/v1",
                         "api_key": "sk-secret-text",
                         "is_default": True,
+                        "capabilities": ["text_generation", "vision"],
                     },
                     {
                         "name": "Image Model",
@@ -4079,6 +4113,7 @@ def test_model_configs_import_upserts_all_configs_and_encrypts_api_keys(tmp_path
                         "base_url": "https://image.example.test/v1",
                         "api_key": "sk-secret-image",
                         "is_default": True,
+                        "capabilities": ["image_generation", "image_edit"],
                     },
                 ],
             },
@@ -4103,6 +4138,8 @@ def test_model_configs_import_upserts_all_configs_and_encrypts_api_keys(tmp_path
             by_name = {config.name: config for config in configs}
             assert by_name["OpenAI Text"].provider == "openai-compatible"
             assert by_name["OpenAI Text"].model_name == "gpt-test"
+            assert by_name["OpenAI Text"].capabilities == ["text_generation", "vision"]
+            assert by_name["Image Model"].capabilities == ["image_generation", "image_edit"]
             assert decrypt_text(by_name["OpenAI Text"].encrypted_api_key) == "sk-secret-text"
             assert decrypt_text(by_name["Image Model"].encrypted_api_key) == "sk-secret-image"
         finally:

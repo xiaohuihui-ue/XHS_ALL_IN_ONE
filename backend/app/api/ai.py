@@ -15,7 +15,7 @@ from backend.app.core.deps import get_current_user
 from backend.app.core.security import decrypt_text
 from backend.app.models import AiDraft, AiGeneratedAsset, DraftAsset, ModelConfig, Task, User
 from backend.app.schemas.common import paginated
-from backend.app.services.ai_service import ImageAiClient, OpenAICompatibleImageClient, OpenAICompatibleTextClient, TextAiClient
+from backend.app.services.ai_service import ImageAiClient, ImageModelAdapterClient, OpenAICompatibleTextClient, TextAiClient
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -125,7 +125,7 @@ def get_text_ai_client() -> TextAiClient:
 
 
 def get_image_ai_client() -> ImageAiClient:
-    return OpenAICompatibleImageClient()
+    return ImageModelAdapterClient()
 
 
 def _serialize_draft(draft: AiDraft) -> dict:

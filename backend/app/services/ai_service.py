@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import json
+import base64
+import mimetypes
 import re
+import time
+from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel, Field
@@ -13,6 +18,17 @@ from backend.app.services.http_logging import ai_http_log, set_current_task_id
 from backend.app.models.ai_http_log import RequestType
 
 from backend.app.models import ModelConfig
+
+
+AOMENT_API_BASE_URL = "https://www.aoment.com/api/aoment/v1"
+AOMENT_DEFAULT_IMAGE_MODEL = "image-n2-fast"
+AOMENT_IMAGE_MODELS = ("image-n2-fast", "image-n2", "image-n1-fast", "image-n1", "image-o2", "image-o2-pro")
+AOMENT_IMAGE_RECOGNITION_MODEL = "image-to-text"
+AOMENT_PROVIDERS = {"aoment", "aoment-api"}
+
+
+def is_aoment_provider(provider: str | None) -> bool:
+    return (provider or "").strip().lower() in AOMENT_PROVIDERS
 
 
 # ----------------------------------------------------------------------
@@ -1247,3 +1263,247 @@ class OpenAICompatibleImageClient:
             "iteration_history": iteration_history,
             "quality_check": final_check,
         }
+
+
+class AomentImageClient(OpenAICompatibleImageClient):
+    def __init__(self, *, poll_interval_seconds: float = 3.0, max_poll_attempts: int = 60) -> None:
+        self.poll_interval_seconds = poll_interval_seconds
+        self.max_poll_attempts = max_poll_attempts
+
+    def _validate(self, *, model_config: ModelConfig, api_key: str) -> None:
+        if not api_key:
+            raise ValueError("Aoment api_key is required")
+
+    @staticmethod
+    def _model_name(model_config: ModelConfig) -> str:
+        return (model_config.model_name or "").strip() or AOMENT_DEFAULT_IMAGE_MODEL
+
+    @staticmethod
+    def _aoment_headers(api_key: str, *, json_request: bool = False) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if json_request:
+            headers["Content-Type"] = "application/json"
+        return headers
+
+    @staticmethod
+    def _raise_for_aoment_error(payload: dict[str, Any]) -> None:
+        if payload.get("success", True) is False:
+            raise ValueError(f"Aoment request failed: {payload.get('error') or payload}")
+
+    @staticmethod
+    def _mime_to_extension(mime: str) -> str:
+        return {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/gif": "gif",
+            "image/bmp": "bmp",
+        }.get(mime.split(";")[0].strip().lower(), "png")
+
+    @classmethod
+    def _image_ref_to_upload(cls, image_ref: str, index: int) -> tuple[str, bytes, str]:
+        if image_ref.startswith("file://"):
+            file_path = image_ref[7:]
+            local = Path(file_path) if len(file_path) > 2 and file_path[1] == ":" else Path(file_path.lstrip("/"))
+            if local.is_file():
+                mime = mimetypes.guess_type(str(local))[0] or "image/png"
+                return (local.name, local.read_bytes(), mime)
+
+        resolved = OpenAICompatibleImageClient._resolve_image_ref(image_ref)
+        if resolved.startswith("data:"):
+            header, encoded = resolved.split(",", 1)
+            mime = header.split(";", 1)[0].replace("data:", "") or "image/png"
+            return (f"reference-{index}.{cls._mime_to_extension(mime)}", base64.b64decode(encoded), mime)
+
+        if resolved.startswith("http://") or resolved.startswith("https://"):
+            response = requests.get(resolved, timeout=60)
+            response.raise_for_status()
+            mime = response.headers.get("Content-Type", "image/png").split(";", 1)[0]
+            path_name = Path(urlparse(resolved).path).name or f"reference-{index}.{cls._mime_to_extension(mime)}"
+            return (path_name, response.content, mime)
+
+        local = Path(resolved)
+        if local.is_file():
+            mime = mimetypes.guess_type(str(local))[0] or "image/png"
+            return (local.name, local.read_bytes(), mime)
+
+        raise ValueError("Aoment image-to-image requires local, data URL, or reachable HTTP image references")
+
+    @classmethod
+    def _build_upload_files(cls, image_refs: list[str]) -> list[tuple[str, tuple[str, bytes, str]]]:
+        return [("images", cls._image_ref_to_upload(image_ref, index)) for index, image_ref in enumerate(image_refs, start=1)]
+
+    def _await_image_record(self, *, record_id: str, api_key: str, submit_payload: dict[str, Any]) -> dict[str, Any]:
+        headers = self._aoment_headers(api_key)
+        for attempt in range(self.max_poll_attempts):
+            response = requests.get(f"{AOMENT_API_BASE_URL}/records/{record_id}", headers=headers, timeout=60)
+            response.raise_for_status()
+            payload = response.json()
+            self._raise_for_aoment_error(payload)
+            status = payload.get("status")
+            if status == "success":
+                image_url = payload.get("imageUrl")
+                if not isinstance(image_url, str) or not image_url:
+                    raise ValueError("Aoment record response missing imageUrl")
+                return {"url": image_url, "raw": {"submit": submit_payload, "record": payload}}
+            if status == "failed":
+                raise ValueError(f"Aoment image generation failed: {payload.get('error') or payload}")
+            if attempt < self.max_poll_attempts - 1 and self.poll_interval_seconds > 0:
+                time.sleep(self.poll_interval_seconds)
+        raise TimeoutError(f"Aoment image generation timed out for record {record_id}")
+
+    def _submit_payload_to_result(self, *, payload: dict[str, Any], api_key: str) -> dict[str, Any]:
+        self._raise_for_aoment_error(payload)
+        image_url = payload.get("imageUrl")
+        if isinstance(image_url, str) and image_url:
+            return {"url": image_url, "raw": payload}
+        record_id = payload.get("recordId")
+        if not isinstance(record_id, str) or not record_id:
+            raise ValueError("Aoment generation response missing recordId")
+        return self._await_image_record(record_id=record_id, api_key=api_key, submit_payload=payload)
+
+    def generate_image(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        prompt: str,
+        reference_images: list[str] | None = None,
+    ) -> dict[str, Any]:
+        self._validate(model_config=model_config, api_key=api_key)
+        model_name = self._model_name(model_config)
+        if model_name not in AOMENT_IMAGE_MODELS:
+            raise ValueError(f"Aoment image model is not supported: {model_name}")
+
+        endpoint = f"{AOMENT_API_BASE_URL}/image/generations"
+        common_fields = {
+            "prompt": prompt,
+            "model": model_name,
+            "aspectRatio": "1:1",
+            "imageSize": "2K",
+        }
+        if reference_images:
+            response = requests.post(
+                endpoint,
+                headers=self._aoment_headers(api_key),
+                data={**common_fields, "showInWebCreating": "false"},
+                files=self._build_upload_files(reference_images),
+                timeout=180,
+            )
+        else:
+            response = requests.post(
+                endpoint,
+                headers=self._aoment_headers(api_key, json_request=True),
+                json={**common_fields, "showInWebCreating": False},
+                timeout=180,
+            )
+        response.raise_for_status()
+        return self._submit_payload_to_result(payload=response.json(), api_key=api_key)
+
+    def describe_image(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        image_url: str,
+        instruction: str,
+    ) -> str:
+        self._validate(model_config=model_config, api_key=api_key)
+        response = requests.post(
+            f"{AOMENT_API_BASE_URL}/image/recognitions",
+            headers=self._aoment_headers(api_key),
+            data={"prompt": instruction or "Describe this image.", "model": AOMENT_IMAGE_RECOGNITION_MODEL},
+            files=self._build_upload_files([image_url]),
+            timeout=120,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        self._raise_for_aoment_error(payload)
+        result_text = payload.get("resultText")
+        if not isinstance(result_text, str) or not result_text.strip():
+            raise ValueError("Aoment recognition response missing resultText")
+        return result_text.strip()
+
+
+class ImageModelAdapterClient:
+    def __init__(
+        self,
+        *,
+        openai_client: ImageAiClient | None = None,
+        aoment_client: ImageAiClient | None = None,
+    ) -> None:
+        self.openai_client = openai_client or OpenAICompatibleImageClient()
+        self.aoment_client = aoment_client or AomentImageClient()
+
+    def _client_for(self, model_config: ModelConfig) -> ImageAiClient:
+        return self.aoment_client if is_aoment_provider(model_config.provider) else self.openai_client
+
+    def generate_cover(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        prompt: str,
+        size: str,
+        style: str,
+    ) -> dict[str, Any]:
+        return self._client_for(model_config).generate_cover(
+            model_config=model_config,
+            api_key=api_key,
+            prompt=prompt,
+            size=size,
+            style=style,
+        )
+
+    def generate_image(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        prompt: str,
+        reference_images: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return self._client_for(model_config).generate_image(
+            model_config=model_config,
+            api_key=api_key,
+            prompt=prompt,
+            reference_images=reference_images,
+        )
+
+    def describe_image(
+        self,
+        *,
+        model_config: ModelConfig,
+        api_key: str,
+        image_url: str,
+        instruction: str,
+    ) -> str:
+        return self._client_for(model_config).describe_image(
+            model_config=model_config,
+            api_key=api_key,
+            image_url=image_url,
+            instruction=instruction,
+        )
+
+    def generate_image_with_retry(
+        self,
+        *,
+        prompt: str,
+        reference_images: list[str] | None,
+        image_model_config: ModelConfig,
+        image_api_key: str,
+        text_model_config: ModelConfig,
+        text_api_key: str,
+        topic: str,
+        max_retries: int = 2,
+    ) -> dict:
+        return self._client_for(image_model_config).generate_image_with_retry(
+            prompt=prompt,
+            reference_images=reference_images,
+            image_model_config=image_model_config,
+            image_api_key=image_api_key,
+            text_model_config=text_model_config,
+            text_api_key=text_api_key,
+            topic=topic,
+            max_retries=max_retries,
+        )

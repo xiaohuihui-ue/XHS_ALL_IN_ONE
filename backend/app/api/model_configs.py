@@ -12,6 +12,7 @@ from backend.app.core.deps import get_current_user
 from backend.app.core.security import decrypt_text, encrypt_text
 from backend.app.models import DEFAULT_TEXT_MODEL_NAME, ModelConfig, User
 from backend.app.schemas.common import paginated
+from backend.app.services.ai_service import AOMENT_API_BASE_URL, AOMENT_DEFAULT_IMAGE_MODEL, is_aoment_provider
 
 router = APIRouter(prefix="/model-configs", tags=["model-configs"])
 
@@ -69,15 +70,23 @@ def _serialize_export_config(config: ModelConfig) -> dict:
     }
 
 
-def _default_model_name(model_type: str) -> str:
+def _default_model_name(model_type: str, provider: str = "") -> str:
+    if model_type == "image" and is_aoment_provider(provider):
+        return AOMENT_DEFAULT_IMAGE_MODEL
     return DEFAULT_TEXT_MODEL_NAME if model_type == "text" else ""
 
 
-def _normalize_model_name(model_type: str, model_name: Optional[str]) -> str:
+def _normalize_model_name(model_type: str, model_name: Optional[str], provider: str = "") -> str:
     if model_name == "gpt5.4":
         return DEFAULT_TEXT_MODEL_NAME
     cleaned = (model_name or "").strip()
-    return cleaned or _default_model_name(model_type)
+    return cleaned or _default_model_name(model_type, provider)
+
+
+def _normalize_base_url(model_type: str, provider: str, base_url: Optional[str]) -> str:
+    if model_type == "image" and is_aoment_provider(provider):
+        return AOMENT_API_BASE_URL
+    return (base_url or "").strip()
 
 
 def _get_owned_config(db: Session, current_user: User, config_id: int) -> ModelConfig:
@@ -139,8 +148,8 @@ def import_model_configs(
     for item in payload.configs:
         name = item.name.strip()
         provider = item.provider.strip()
-        model_name = _normalize_model_name(item.model_type, item.model_name)
-        base_url = item.base_url.strip()
+        model_name = _normalize_model_name(item.model_type, item.model_name, provider)
+        base_url = _normalize_base_url(item.model_type, provider, item.base_url)
         api_key = item.api_key.strip()
 
         config = db.scalar(
@@ -203,8 +212,8 @@ def create_model_config(
         name=payload.name,
         model_type=payload.model_type,
         provider=payload.provider,
-        model_name=_normalize_model_name(payload.model_type, payload.model_name),
-        base_url=payload.base_url,
+        model_name=_normalize_model_name(payload.model_type, payload.model_name, payload.provider),
+        base_url=_normalize_base_url(payload.model_type, payload.provider, payload.base_url),
         encrypted_api_key=encrypt_text(payload.api_key) if payload.api_key else "",
         is_default=payload.is_default,
     )
@@ -223,16 +232,23 @@ def test_model_config(
     config = _get_owned_config(db, current_user, config_id)
     if not config.encrypted_api_key:
         return {"id": config.id, "status": "error", "message": "未配置 API Key"}
-    if not config.base_url:
+    is_aoment_image = config.model_type == "image" and is_aoment_provider(config.provider)
+    if not is_aoment_image and not config.base_url:
         return {"id": config.id, "status": "error", "message": "未配置 Base URL"}
 
     api_key = decrypt_text(config.encrypted_api_key)
-    base_url = config.base_url.rstrip("/")
+    base_url = AOMENT_API_BASE_URL if is_aoment_image else config.base_url.rstrip("/")
 
     try:
         import requests as http_requests
 
-        if config.model_type == "image":
+        if is_aoment_image:
+            resp = http_requests.get(
+                f"{base_url}/credits",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=30,
+            )
+        elif config.model_type == "image":
             resp = http_requests.post(
                 f"{base_url}/images/generations",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -275,15 +291,18 @@ def update_model_config(
     if payload.provider is not None:
         config.provider = payload.provider
     if payload.model_name is not None:
-        config.model_name = _normalize_model_name(config.model_type, payload.model_name)
+        config.model_name = _normalize_model_name(config.model_type, payload.model_name, config.provider)
     if payload.base_url is not None:
-        config.base_url = payload.base_url
+        config.base_url = _normalize_base_url(config.model_type, config.provider, payload.base_url)
     if payload.api_key is not None:
         config.encrypted_api_key = encrypt_text(payload.api_key) if payload.api_key else ""
     if payload.is_default is not None:
         if payload.is_default:
             _clear_default_for_type(db, current_user.id, config.model_type)
         config.is_default = payload.is_default
+    if config.model_type == "image" and is_aoment_provider(config.provider):
+        config.model_name = _normalize_model_name(config.model_type, config.model_name, config.provider)
+        config.base_url = AOMENT_API_BASE_URL
 
     db.commit()
     db.refresh(config)

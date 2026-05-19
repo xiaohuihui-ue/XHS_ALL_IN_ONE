@@ -24,6 +24,7 @@ import {
   Popconfirm,
   Row,
   Segmented,
+  Select,
   Space,
   Spin,
   Tag,
@@ -49,6 +50,14 @@ import {
   modelConfigBackupToJson,
   normalizeModelConfigBackup,
 } from "./model-config-json";
+import {
+  AOMENT_API_BASE_URL,
+  AOMENT_IMAGE_MODEL_OPTIONS,
+  defaultBaseUrlForProvider,
+  defaultModelNameForProvider,
+  isAomentProvider,
+  providerOptionsForType,
+} from "./model-provider-options";
 
 const { Text } = Typography;
 
@@ -61,10 +70,6 @@ const emptyForm: ModelConfigPayload = {
   api_key: "",
   is_default: true,
 };
-
-function defaultModelName(type: ModelType): string {
-  return type === "text" ? "gpt-5.4" : "";
-}
 
 function typeLabel(type: ModelType): string {
   return type === "text" ? "文本模型" : "图片模型";
@@ -117,16 +122,21 @@ export function ModelConfigPage() {
       setError("请填写配置名称和模型名称。");
       return;
     }
+    if (form.model_type === "image" && isAomentProvider(form.provider) && !form.api_key.trim()) {
+      setError("请填写 Aoment API Key。");
+      return;
+    }
 
     setIsSaving(true);
     setMessage(null);
     setError(null);
+    const provider = form.provider.trim();
     const payload = {
       ...form,
       name: form.name.trim(),
       model_name: form.model_name.trim(),
-      provider: form.provider.trim(),
-      base_url: form.base_url.trim(),
+      provider,
+      base_url: defaultBaseUrlForProvider(form.model_type, provider, form.base_url.trim()),
       api_key: form.api_key.trim(),
     };
     try {
@@ -160,7 +170,7 @@ export function ModelConfigPage() {
       model_type: config.model_type,
       provider: config.provider,
       model_name: config.model_name,
-      base_url: config.base_url,
+      base_url: defaultBaseUrlForProvider(config.model_type, config.provider, config.base_url),
       api_key: "",
       is_default: config.is_default,
     });
@@ -367,7 +377,16 @@ export function ModelConfigPage() {
                 setForm((current) => ({
                   ...current,
                   model_type: val as ModelType,
-                  model_name: defaultModelName(val as ModelType),
+                  provider: val === "text" && isAomentProvider(current.provider) ? "openai-compatible" : current.provider,
+                  model_name: defaultModelNameForProvider(
+                    val as ModelType,
+                    val === "text" && isAomentProvider(current.provider) ? "openai-compatible" : current.provider,
+                  ),
+                  base_url: defaultBaseUrlForProvider(
+                    val as ModelType,
+                    val === "text" && isAomentProvider(current.provider) ? "openai-compatible" : current.provider,
+                    current.base_url,
+                  ),
                 }))
               }
               block
@@ -388,31 +407,59 @@ export function ModelConfigPage() {
                     placeholder="例如：默认文本模型"
                   />
                 </Form.Item>
-                <Alert message="所有模型需兼容 OpenAI 接口规范" type="info" style={{ marginBottom: 16, fontSize: 12 }} />
-                <Form.Item label="模型名称">
-                  <Input
-                    value={form.model_name}
-                    onChange={(e) =>
+                <Alert message="OpenAI Compatible 使用自定义 Base URL；Aoment API 固定使用官方 Base URL，只需要填写 API Key。" type="info" style={{ marginBottom: 16, fontSize: 12 }} />
+                <Form.Item label="Provider">
+                  <Select
+                    value={form.provider}
+                    options={providerOptionsForType(form.model_type)}
+                    onChange={(provider) =>
                       setForm((current) => ({
                         ...current,
-                        model_name: e.target.value,
+                        provider,
+                        model_name: defaultModelNameForProvider(current.model_type, provider),
+                        base_url: defaultBaseUrlForProvider(current.model_type, provider, current.base_url),
                       }))
-                    }
-                    placeholder={
-                      form.model_type === "text" ? "gpt-4o-mini" : "gpt-image-1"
                     }
                   />
                 </Form.Item>
+                <Form.Item label="模型名称">
+                  {form.model_type === "image" && isAomentProvider(form.provider) ? (
+                    <Select
+                      value={form.model_name || "image-n2-fast"}
+                      options={AOMENT_IMAGE_MODEL_OPTIONS}
+                      onChange={(model_name) =>
+                        setForm((current) => ({
+                          ...current,
+                          model_name,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      value={form.model_name}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          model_name: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        form.model_type === "text" ? "gpt-4o-mini" : "gpt-image-1"
+                      }
+                    />
+                  )}
+                </Form.Item>
                 <Form.Item label="Base URL">
                   <Input
-                    value={form.base_url}
+                    value={defaultBaseUrlForProvider(form.model_type, form.provider, form.base_url)}
+                    disabled={form.model_type === "image" && isAomentProvider(form.provider)}
                     onChange={(e) =>
                       setForm((current) => ({
                         ...current,
                         base_url: e.target.value,
                       }))
                     }
-                    placeholder="https://api.example.com/v1"
+                    placeholder={form.model_type === "image" && isAomentProvider(form.provider) ? AOMENT_API_BASE_URL : "https://api.example.com/v1"}
                   />
                 </Form.Item>
                 <Form.Item label="API Key">

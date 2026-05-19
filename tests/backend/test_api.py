@@ -4134,6 +4134,79 @@ def test_text_model_config_defaults_to_gpt_54_when_model_name_omitted(tmp_path):
         app.dependency_overrides.pop(db_dependency, None)
 
 
+def test_aoment_image_model_config_uses_fixed_base_url_and_default_model(tmp_path):
+    db_dependency = _override_database(tmp_path)
+    owner_token = _register_model_config_test_token("model-aoment-owner")
+    try:
+        response = client.post(
+            "/api/model-configs",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={
+                "name": "Aoment Image",
+                "model_type": "image",
+                "provider": "aoment",
+                "base_url": "",
+                "api_key": "aoment_secret",
+                "is_default": True,
+            },
+        )
+
+        assert response.status_code == 200
+        created = response.json()
+        assert created["provider"] == "aoment"
+        assert created["model_name"] == "image-n2-fast"
+        assert created["base_url"] == "https://www.aoment.com/api/aoment/v1"
+    finally:
+        app.dependency_overrides.pop(db_dependency, None)
+
+
+def test_aoment_image_model_config_test_uses_credits_endpoint(tmp_path, monkeypatch):
+    db_dependency = _override_database(tmp_path)
+    owner_token = _register_model_config_test_token("model-aoment-test-owner")
+    captured: dict = {}
+
+    class FakeResponse:
+        status_code = 200
+        text = '{"success": true, "data": {"credits": 120}}'
+
+        def json(self):
+            return {"success": True, "data": {"credits": 120}}
+
+    def fake_get(url, *, headers=None, timeout=None):
+        captured.update({"url": url, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    try:
+        create_response = client.post(
+            "/api/model-configs",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={
+                "name": "Aoment Image",
+                "model_type": "image",
+                "provider": "aoment",
+                "model_name": "image-o2-pro",
+                "base_url": "",
+                "api_key": "aoment_secret",
+                "is_default": True,
+            },
+        )
+        assert create_response.status_code == 200
+
+        test_response = client.post(
+            f"/api/model-configs/{create_response.json()['id']}/test",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+
+        assert test_response.status_code == 200
+        assert test_response.json()["status"] == "ok"
+        assert captured["url"] == "https://www.aoment.com/api/aoment/v1/credits"
+        assert captured["headers"] == {"Authorization": "Bearer aoment_secret"}
+    finally:
+        app.dependency_overrides.pop(db_dependency, None)
+
+
 def test_model_configs_update_and_set_default_are_owner_scoped(tmp_path):
     db_dependency = _override_database(tmp_path)
     owner_token = _register_model_config_test_token("model-update-owner")

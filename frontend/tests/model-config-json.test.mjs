@@ -15,6 +15,7 @@ const textConfig = {
   base_url: "https://api.example.com/v1",
   api_key: "sk-local-test",
   is_default: true,
+  capabilities: ["text_generation"],
 };
 
 const imageConfig = {
@@ -25,6 +26,7 @@ const imageConfig = {
   base_url: "https://image.example.com/v1",
   api_key: "sk-image-test",
   is_default: true,
+  capabilities: ["image_generation", "image_edit"],
 };
 
 test("exports all model configs as a versioned JSON backup", () => {
@@ -63,6 +65,7 @@ test("imports a versioned JSON backup into trimmed model config payloads", () =>
       base_url: "https://api.example.com/v1/",
       api_key: "sk-imported",
       is_default: false,
+      capabilities: ["image_generation", "image_edit"],
     },
     textConfig,
   ]);
@@ -70,6 +73,22 @@ test("imports a versioned JSON backup into trimmed model config payloads", () =>
 
 test("accepts a direct array for hand-written JSON backup files", () => {
   assert.deepEqual(normalizeModelConfigBackup([textConfig, imageConfig]), [textConfig, imageConfig]);
+});
+
+test("adds default capabilities when a backup omits them", () => {
+  const imported = normalizeModelConfigBackup([
+    {
+      ...textConfig,
+      capabilities: undefined,
+    },
+    {
+      ...imageConfig,
+      capabilities: undefined,
+    },
+  ]);
+
+  assert.deepEqual(imported[0].capabilities, ["text_generation"]);
+  assert.deepEqual(imported[1].capabilities, ["image_generation", "image_edit"]);
 });
 
 test("rejects JSON without a supported model_type", () => {

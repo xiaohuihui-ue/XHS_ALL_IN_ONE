@@ -21,6 +21,10 @@ def test_generate_image_resolves_reference_file_before_request(tmp_path, monkeyp
     captured_request = {}
 
     class FakeResponse:
+        status_code = 200
+        text = '{"data":[{"url":"https://cdn.example.test/generated.png"}]}'
+        content = b'{"data":[{"url":"https://cdn.example.test/generated.png"}]}'
+
         def raise_for_status(self):
             return None
 

@@ -14,16 +14,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f1f1f;
+  background: var(--color-background-secondary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #434343;
+  background: var(--color-border);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--color-text-muted);
 }
 
 .ant-layout {
@@ -39,7 +39,7 @@ body {
 }
 
 .ant-card:hover {
-  border-color: #1668dc40;
+  border-color: var(--color-accent-subtle);
 }
 
 .ant-card-hoverable:hover {
@@ -53,7 +53,7 @@ body {
 }
 
 .ant-table-tbody > tr:hover > td {
-  background: #1a1a2e !important;
+  background: var(--color-row-hover) !important;
 }
 
 .ant-tag {
@@ -93,7 +93,7 @@ body {
 }
 
 .ant-spin-dot-item {
-  background: #1668dc;
+  background: var(--color-accent);
 }
 
 .ant-image-preview-img {

@@ -79,7 +79,15 @@ function ModelTypeIcon({ type }: { type: ModelType }) {
   return type === "text" ? <RobotOutlined /> : <FileImageOutlined />;
 }
 
-const cardStyle = { background: "#1f1f1f", borderColor: "#303030" };
+const cardStyle = {
+  background: "var(--color-background-secondary)",
+  borderColor: "var(--color-border)",
+};
+
+const nestedCardStyle = {
+  background: "var(--color-background-elevated)",
+  borderColor: "var(--color-border-secondary)",
+};
 
 export function ModelConfigPage() {
   const [configs, setConfigs] = useState<ModelConfig[]>([]);
@@ -543,10 +551,7 @@ export function ModelConfigPage() {
                         <Card
                           key={config.id}
                           size="small"
-                          style={{
-                            background: "#262626",
-                            borderColor: "#303030",
-                          }}
+                          style={nestedCardStyle}
                         >
                           <Space
                             style={{

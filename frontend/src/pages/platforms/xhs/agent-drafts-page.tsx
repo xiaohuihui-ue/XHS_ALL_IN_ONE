@@ -58,7 +58,7 @@ export function XhsAgentDraftsPage() {
       {/* Workflow steps area */}
       <div style={{ minHeight: "calc(100vh - 420px)", marginBottom: 16 }}>
         {steps.length === 0 && !running && (
-          <div style={{ textAlign: "center", padding: "64px 0", color: "rgba(255,255,255,0.18)" }}>
+          <div style={{ textAlign: "center", padding: "64px 0", color: "var(--color-text-muted)" }}>
             <PictureOutlined style={{ fontSize: 40, display: "block", marginBottom: 10 }} />
             <Text type="secondary" style={{ fontSize: 13 }}>在下方输入需求，点击发送开始生成</Text>
           </div>
@@ -67,7 +67,7 @@ export function XhsAgentDraftsPage() {
       </div>
 
       {/* Input area */}
-      <div style={{ position: "sticky", bottom: 0, background: "var(--color-background-primary, #141414)", paddingTop: 8, paddingBottom: 4 }}>
+      <div style={{ position: "sticky", bottom: 0, background: "var(--color-background-primary)", paddingTop: 8, paddingBottom: 4 }}>
         {/* Reference images row */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
           <Upload
@@ -94,7 +94,7 @@ export function XhsAgentDraftsPage() {
                 alt={f.name}
                 width={40}
                 height={40}
-                style={{ objectFit: "cover", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)" }}
+                style={{ objectFit: "cover", borderRadius: 6, border: "1px solid var(--color-border)" }}
               />
               <Button
                 size="small"
@@ -104,7 +104,8 @@ export function XhsAgentDraftsPage() {
                 style={{
                   position: "absolute", top: -5, right: -5,
                   width: 16, height: 16, minWidth: 0, padding: 0,
-                  background: "rgba(0,0,0,0.7)", borderRadius: "50%",
+                  background: "var(--color-background-elevated)", borderRadius: "50%",
+                  border: "1px solid var(--color-border)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               />
@@ -114,10 +115,10 @@ export function XhsAgentDraftsPage() {
 
         {/* Input box */}
         <div style={{
-          border: "1px solid rgba(255,255,255,0.15)",
+          border: "1px solid var(--color-border)",
           borderRadius: 12,
           padding: "10px 14px",
-          background: "rgba(255,255,255,0.04)",
+          background: "var(--color-background-secondary)",
         }}>
           <TextArea
             value={request}

@@ -92,9 +92,9 @@ export function DraftStepCard({ step }: { step: WorkflowStep }) {
       width: "100%",
       marginBottom: 10,
       padding: "12px 16px",
-      background: "rgba(255,255,255,0.04)",
+      background: "var(--color-background-secondary)",
       borderRadius: 10,
-      border: `1px solid ${isError ? "rgba(255,77,79,0.3)" : "rgba(255,255,255,0.08)"}`,
+      border: `1px solid ${isError ? "rgba(255,77,79,0.3)" : "var(--color-border)"}`,
     }}>
       <Space style={{ marginBottom: hasContent ? 8 : 0 }}>
         {icon}
@@ -138,7 +138,7 @@ export function DraftStepCard({ step }: { step: WorkflowStep }) {
           {step.body && (
             <Paragraph
               ellipsis={{ rows: 3, expandable: true, symbol: "展开" }}
-              style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", marginBottom: 8 }}
+              style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}
             >
               {step.body}
             </Paragraph>
@@ -158,7 +158,7 @@ export function DraftStepCard({ step }: { step: WorkflowStep }) {
             />
           )}
           {step.cover_strategy && (
-            <div style={{ marginBottom: 6, padding: "6px 10px", background: "rgba(255,255,255,0.04)", borderRadius: 6 }}>
+            <div style={{ marginBottom: 6, padding: "6px 10px", background: "var(--color-background-elevated)", borderRadius: 6 }}>
               <Text type="secondary" style={{ fontSize: 11 }}>
                 封面策略：{step.cover_strategy.cover_type} | 视觉核心：{step.cover_strategy.visual_core}
               </Text>

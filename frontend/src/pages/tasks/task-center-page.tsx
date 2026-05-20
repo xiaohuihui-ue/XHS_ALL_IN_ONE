@@ -211,7 +211,10 @@ export function TaskCenterPage() {
     },
   ];
 
-  const cardStyle = { background: "#1f1f1f", borderColor: "#303030" };
+  const cardStyle = {
+    background: "var(--color-background-secondary)",
+    borderColor: "var(--color-border)",
+  };
 
   return (
     <div>
@@ -338,7 +341,7 @@ export function TaskCenterPage() {
           </div>
         ) : tasks.length === 0 ? (
           <Empty
-            image={<ClockCircleOutlined style={{ fontSize: 48, color: "#555" }} />}
+            image={<ClockCircleOutlined style={{ fontSize: 48, color: "var(--color-text-muted)" }} />}
             description={
               <div>
                 <Text strong>暂无任务记录</Text>

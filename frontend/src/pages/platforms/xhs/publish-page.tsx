@@ -75,9 +75,9 @@ function isFutureScheduledAt(value: string): boolean {
 }
 
 const panelStyle: React.CSSProperties = {
-  background: "#1a1a1a",
+  background: "var(--color-background-secondary)",
   borderRadius: 8,
-  border: "1px solid #303030",
+  border: "1px solid var(--color-border)",
 };
 
 const cardBodyStyle: React.CSSProperties = { padding: 16 };
@@ -293,13 +293,13 @@ export function XhsPublishPage() {
         <Card style={panelStyle} styles={{ body: cardBodyStyle }}>
           <div style={{ textAlign: "center", padding: 48 }}>
             <Spin size="large" />
-            <Paragraph style={{ color: "#8c8c8c", marginTop: 16 }}>正在加载发布任务...</Paragraph>
+            <Paragraph type="secondary" style={{ marginTop: 16 }}>正在加载发布任务...</Paragraph>
           </div>
         </Card>
       ) : jobs.length === 0 ? (
         <Card style={panelStyle} styles={{ body: cardBodyStyle }}>
           <Empty
-            image={<SendOutlined style={{ fontSize: 48, color: "#8c8c8c" }} />}
+            image={<SendOutlined style={{ fontSize: 48, color: "var(--color-text-muted)" }} />}
             imageStyle={{ height: 64 }}
             description={
               <div>
@@ -332,7 +332,7 @@ export function XhsPublishPage() {
               }
               extra={<Tag>{filteredJobs.length} 个</Tag>}
               style={panelStyle}
-              styles={{ body: { padding: 0 }, header: { borderBottom: "1px solid #303030" } }}
+              styles={{ body: { padding: 0 }, header: { borderBottom: "1px solid var(--color-border-secondary)" } }}
             >
               <List
                 dataSource={filteredJobs}
@@ -348,7 +348,7 @@ export function XhsPublishPage() {
                     }}
                   >
                     <List.Item.Meta
-                      title={<Text ellipsis style={{ maxWidth: "100%", color: "#e8e8e8" }}>{job.title || "未命名"}</Text>}
+                      title={<Text ellipsis style={{ maxWidth: "100%" }}>{job.title || "未命名"}</Text>}
                       description={
                         <Space direction="vertical" size={4} style={{ width: "100%" }}>
                           <Space size={4} wrap>
@@ -403,11 +403,11 @@ export function XhsPublishPage() {
                       <Card
                         title={<Space><EyeOutlined /><span>内容预览</span></Space>}
                         style={panelStyle}
-                        styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid #303030" } }}
+                        styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid var(--color-border-secondary)" } }}
                         extra={<Text type="secondary" style={{ fontSize: 12 }}>内容修改请前往草稿工坊</Text>}
                       >
                         <Title level={5} style={{ marginBottom: 8 }}>{selectedJob.title || "未填写标题"}</Title>
-                        <Paragraph style={{ whiteSpace: "pre-wrap", color: "rgba(255,255,255,.65)", fontSize: 13, marginBottom: 16 }}>
+                        <Paragraph style={{ whiteSpace: "pre-wrap", color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 16 }}>
                           {selectedJob.body || "暂无正文"}
                         </Paragraph>
 
@@ -469,7 +469,7 @@ export function XhsPublishPage() {
                       <Card
                         title={<Space><CalendarOutlined /><span>发布参数</span></Space>}
                         style={{ ...panelStyle, marginBottom: 16 }}
-                        styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid #303030" } }}
+                        styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid var(--color-border-secondary)" } }}
                       >
                         <Form layout="vertical" size="small">
                           <Form.Item label="发布账号" required>
@@ -534,7 +534,7 @@ export function XhsPublishPage() {
                           </Space>
                         }
                         style={panelStyle}
-                        styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid #303030" } }}
+                        styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid var(--color-border-secondary)" } }}
                       >
                         <List
                           size="small"
@@ -543,7 +543,7 @@ export function XhsPublishPage() {
                             <List.Item style={{ padding: "4px 0", border: "none" }}>
                               <Space>
                                 {check.ok ? <CheckCircleOutlined style={{ color: "#52c41a" }} /> : <ExclamationCircleOutlined style={{ color: "#ff4d4f" }} />}
-                                <Text style={{ color: check.ok ? "#8c8c8c" : "#ff4d4f", fontSize: 13 }}>{check.label}</Text>
+                                <Text style={{ color: check.ok ? "var(--color-text-secondary)" : "#ff4d4f", fontSize: 13 }}>{check.label}</Text>
                               </Space>
                             </List.Item>
                           )}

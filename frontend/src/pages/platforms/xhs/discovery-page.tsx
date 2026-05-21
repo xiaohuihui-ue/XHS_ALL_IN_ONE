@@ -137,7 +137,7 @@ export function XhsDiscoveryPage() {
     setError(null); if (!selectedAccountId) { setError("请先选择一个 PC 账号。"); return; }
     setSavingNoteIds((c) => [...c, note.note_id]);
     try { const d = await ensureNoteDetail(note); await saveXhsNotesToLibrary({ account_id: selectedAccountId, notes: [d] }); setSavedNoteIds((c) => c.includes(note.note_id) ? c : [...c, note.note_id]); }
-    catch { setError("保存到内容库失败。"); } finally { setSavingNoteIds((c) => c.filter((id) => id !== note.note_id)); }
+    catch { setError("保存到我的收藏失败。"); } finally { setSavingNoteIds((c) => c.filter((id) => id !== note.note_id)); }
   }
 
   async function ensureNoteDetail(note: XhsSearchNote): Promise<XhsSearchNote> {
@@ -196,7 +196,7 @@ export function XhsDiscoveryPage() {
   return (
     <div>
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-        <Col><Title level={4} style={{ margin: 0 }}>笔记发现</Title><Text type="secondary">按关键词或链接查找笔记，查看详情、评论和原文，保存到内容库</Text></Col>
+        <Col><Title level={4} style={{ margin: 0 }}>笔记发现</Title><Text type="secondary">按关键词或链接查找笔记，查看详情、评论和原文，保存到我的收藏</Text></Col>
         <Col><Button icon={<ReloadOutlined />} onClick={loadAccounts} loading={isLoadingAccounts}>刷新账号</Button></Col>
       </Row>
 
@@ -343,7 +343,7 @@ export function XhsDiscoveryPage() {
                 onClick={() => void handleSaveNote(selectedNote)}
                 loading={savingNoteIds.includes(selectedNote.note_id)}
                 disabled={savedNoteIds.includes(selectedNote.note_id)}
-              >{savedNoteIds.includes(selectedNote.note_id) ? "已保存" : "保存到内容库"}</Button>
+              >{savedNoteIds.includes(selectedNote.note_id) ? "已保存" : "保存到我的收藏"}</Button>
               <Button icon={<CommentOutlined />} onClick={() => void handlePreviewComments(selectedNote)}>{commentPreviewByNoteId[selectedNote.note_id] ? "收起评论" : "查看评论"}</Button>
               {getPreviewNoteUrl(selectedNote) && <Button type="primary" icon={<LinkOutlined />} href={getPreviewNoteUrl(selectedNote)} target="_blank" rel="noreferrer">打开原文</Button>}
             </Space>

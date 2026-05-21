@@ -624,7 +624,7 @@ export function XhsDraftsPage() {
                   <div>
                     <Paragraph type="secondary">还没有可编辑草稿。</Paragraph>
                     <Link to="/platforms/xhs/library">
-                      <Button size="small">去内容库选择笔记</Button>
+                      <Button size="small">去我的收藏选择笔记</Button>
                     </Link>
                   </div>
                 }
@@ -1225,7 +1225,7 @@ export function XhsDraftsPage() {
               key: "user",
               label: "普通图片资产",
               children: userImages.length === 0 ? (
-                <Text type="secondary" style={{ fontSize: 12 }}>暂无普通图片资产，请先在图片工坊上传</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>暂无普通图片资产，请先上传图片</Text>
               ) : (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, maxHeight: 200, overflowY: "auto" }}>
                   {userImages.map((img) => (
@@ -1244,7 +1244,7 @@ export function XhsDraftsPage() {
               key: "ai",
               label: "AI 图片资产",
               children: aiAssets.length === 0 ? (
-                <Text type="secondary" style={{ fontSize: 12 }}>暂无 AI 图片资产，请先在图片工坊生成</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>暂无 AI 图片资产，请先生成图片</Text>
               ) : (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, maxHeight: 200, overflowY: "auto" }}>
                   {aiAssets.filter(a => a.file_path.startsWith("http")).map((asset) => (
@@ -1346,8 +1346,8 @@ export function XhsDraftsPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader
         eyebrow="XHS Drafts"
-        title="草稿工坊"
-        description="管理草稿、编辑内容和素材、AI 改写润色，生成结果送入发布中心。"
+        title="我的创作"
+        description="管理创作草稿、编辑内容和素材、AI 改写润色，生成结果送入发布中心。"
         action={
           <Button icon={<ReloadOutlined />} onClick={loadDrafts} loading={isLoading}>
             刷新草稿

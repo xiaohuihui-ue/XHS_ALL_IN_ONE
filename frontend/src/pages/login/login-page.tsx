@@ -21,7 +21,7 @@ import {
   Typography,
 } from "antd";
 import { type FormEvent, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
 import { useAuth } from "../../hooks/use-auth";
@@ -49,7 +49,6 @@ const registerSchema = loginSchema.extend({
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [mode, setMode] = useState<AuthMode>("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -71,8 +70,7 @@ export function LoginPage() {
       setIsSubmitting(true);
       try {
         await auth.login(parsed.data);
-        const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
-        navigate(from || "/platforms/xhs/dashboard", { replace: true });
+        navigate("/platforms/xhs/agent-drafts", { replace: true });
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "账号不存在或密码错误，请检查后重试。");
       } finally {
@@ -91,8 +89,7 @@ export function LoginPage() {
       setIsSubmitting(true);
       try {
         await auth.register(parsed.data);
-        const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
-        navigate(from || "/platforms/xhs/dashboard", { replace: true });
+        navigate("/platforms/xhs/agent-drafts", { replace: true });
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "注册失败，请检查后重试。");
       } finally {
@@ -169,8 +166,8 @@ export function LoginPage() {
             type="secondary"
             style={{ fontSize: 15, marginBottom: 40 }}
           >
-            数据发现、内容库、AI
-            改写、账号矩阵和 Creator
+            笔记发现、我的收藏、AI助手、
+            我的创作、账号矩阵和 Creator
             发布统一在一个工作区里完成。
           </Paragraph>
 
@@ -192,7 +189,7 @@ export function LoginPage() {
                 title={
                   <Space size={4}>
                     <RobotOutlined />
-                    <span>AI 草稿</span>
+                    <span>AI助手</span>
                   </Space>
                 }
                 value={14}

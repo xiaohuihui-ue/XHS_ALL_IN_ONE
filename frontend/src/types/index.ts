@@ -865,6 +865,8 @@ export interface ImageQualityCheck {
   has_title_space: boolean;
   need_retry: boolean;
   retry_reason: string;
+  vision_check_status?: string;
+  vision_check_message?: string;
 }
 
 export interface AgentDraftBatchResult {
@@ -872,3 +874,196 @@ export interface AgentDraftBatchResult {
   created_count: number;
   failed_count: number;
 }
+
+export type XhsAgentResearchOptions = {
+  keywords: string[];
+  reference_note_ids: number[];
+  search_account_id?: number;
+  search_limit: number;
+  auto_save: boolean;
+};
+
+export type XhsAgentRunPayload = {
+  model?: string;
+  messages: AgentDraftRequestMessage[];
+  n?: number;
+  temperature?: number;
+  top_p?: number;
+  stream?: false;
+  response_format?: Record<string, unknown>;
+  metadata: {
+    platform: "xhs";
+    account_id?: number;
+    output_requirements?: string;
+    save_to_drafts?: string;
+    research?: XhsAgentResearchOptions;
+  };
+  image_options?: {
+    model?: string;
+    n?: number;
+    size?: string;
+    quality?: string;
+    style?: string;
+    response_format?: string;
+  };
+  user?: string;
+};
+
+export type XhsAgentRunDraft = {
+  id: number;
+  platform?: PlatformId | string;
+  title?: string;
+  body?: string;
+  tags?: Array<{ id?: string; name: string }>;
+  created_at?: string;
+};
+
+export type XhsAgentRunAsset = AgentDraftItem["assets"][number];
+
+export type XhsAgentRunItem = {
+  draft: XhsAgentRunDraft | null;
+  assets: XhsAgentRunAsset[];
+  status: "completed" | "partial" | "failed" | string;
+  errors?: string[];
+  cover_strategy?: CoverStrategy;
+  image_prompt_spec?: ImagePromptSpec;
+  publish_tips?: string;
+  final_image_prompt?: string;
+  iteration_history?: IterationRound[];
+  quality_check?: ImageQualityCheck;
+  image_quality_check?: ImageQualityCheck;
+};
+
+export type XhsAgentRunResult = {
+  run_id: number;
+  status: string;
+  progress?: number;
+  account_check?: Record<string, unknown>;
+  model_check?: Record<string, unknown>;
+  research?: Record<string, unknown>;
+  publish_preview?: Record<string, unknown>;
+  result?: {
+    items: XhsAgentRunItem[];
+    created_count: number;
+    failed_count: number;
+  };
+  report?: {
+    file_name: string;
+    file_path?: string;
+    download_url: string;
+  };
+  publish_confirmation?: {
+    created_count: number;
+    publish_job_ids: number[];
+    draft_ids: number[];
+    publish_mode: string;
+  };
+};
+
+export type ConfirmXhsAgentRunPayload = {
+  platform_account_id?: number;
+  draft_ids: number[];
+  publish_mode: "immediate" | "scheduled";
+  scheduled_at?: string;
+  topics?: string[];
+  location?: string;
+  privacy_type?: number;
+  is_private?: boolean;
+};
+
+export type SourceImage = {
+  id: string;
+  role: string;
+  url: string;
+};
+
+export type ImageEditTaskType =
+  | "style_transfer"
+  | "room_makeover"
+  | "material_replace"
+  | "lighting_enhance"
+  | "declutter"
+  | "cover_composition"
+  | "detail_enhance"
+  | "variation";
+
+export type ImageEditSpec = {
+  source_images: SourceImage[];
+  task_type: ImageEditTaskType;
+  domain: "home_decor" | "general";
+  edit_intent: string;
+  preserve: string[];
+  change: string[];
+  avoid: string[];
+  output_goal: "xhs_cover" | "xhs_body" | "general";
+  realism_level: "low" | "medium" | "high";
+  room_type?: string;
+  decor_style?: string;
+};
+
+export type EditAiImagePayload = ImageEditSpec & {
+  n?: number;
+  size?: string;
+  quality?: string;
+  style?: string;
+  response_format?: string;
+  save_to_assets?: boolean;
+};
+
+export type ImageEditPlan = {
+  layout_policy: string;
+  style_policy: string;
+  material_policy: string;
+  lighting_policy: string;
+  composition_policy: string;
+  steps: Array<{
+    step: number;
+    name: string;
+    instruction: string;
+  }>;
+};
+
+export type ImageCompiledPrompts = {
+  positive_prompt: string;
+  negative_prompt: string;
+  compiler_version: string;
+};
+
+export type ImageResultAsset = {
+  url: string;
+  width?: number | null;
+  height?: number | null;
+};
+
+export type ImageQualityReport = {
+  passed: boolean;
+  checks: Array<{
+    name: string;
+    status: "pass" | "warning" | "fail" | "skipped";
+    message: string;
+  }>;
+};
+
+export type ImageGenerationArtifact = {
+  request_id: string;
+  status: "pending" | "planning" | "generating" | "reviewing" | "completed" | "failed" | string;
+  source_images: SourceImage[];
+  normalized_spec?: ImageEditSpec | null;
+  edit_plan?: ImageEditPlan | null;
+  compiled_prompts?: ImageCompiledPrompts | null;
+  result_assets: ImageResultAsset[];
+  quality_report?: ImageQualityReport | null;
+  provenance: {
+    model_config_id?: number | null;
+    model_name?: string | null;
+    created_at: string;
+    knowledge_base?: string | null;
+    prompt_compiler: string;
+  };
+  report?: {
+    file_name: string;
+    file_path?: string;
+    download_url: string;
+  };
+  errors: string[];
+};

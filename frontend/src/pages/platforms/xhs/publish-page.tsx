@@ -278,7 +278,7 @@ export function XhsPublishPage() {
       <PageHeader
         eyebrow="XHS Publish"
         title="发布中心"
-        description="预览草稿内容，配置发布参数后触发 Creator 发布。内容修改请前往草稿工坊。"
+        description="预览草稿内容，配置发布参数后触发 Creator 发布。内容修改请前往我的创作。"
         action={
           <Button icon={<ReloadOutlined />} onClick={loadJobs} loading={isLoading}>
             刷新
@@ -305,7 +305,7 @@ export function XhsPublishPage() {
               <div>
                 <Text strong style={{ fontSize: 16 }}>暂无发布任务</Text>
                 <br />
-                <Text type="secondary">在草稿工坊中将草稿送入发布中心，或通过自动运营生成发布任务。</Text>
+                <Text type="secondary">在我的创作中将草稿送入发布中心，或通过自动运营生成发布任务。</Text>
               </div>
             }
           />
@@ -404,7 +404,7 @@ export function XhsPublishPage() {
                         title={<Space><EyeOutlined /><span>内容预览</span></Space>}
                         style={panelStyle}
                         styles={{ body: cardBodyStyle, header: { borderBottom: "1px solid var(--color-border-secondary)" } }}
-                        extra={<Text type="secondary" style={{ fontSize: 12 }}>内容修改请前往草稿工坊</Text>}
+                        extra={<Text type="secondary" style={{ fontSize: 12 }}>内容修改请前往我的创作</Text>}
                       >
                         <Title level={5} style={{ marginBottom: 8 }}>{selectedJob.title || "未填写标题"}</Title>
                         <Paragraph style={{ whiteSpace: "pre-wrap", color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 16 }}>

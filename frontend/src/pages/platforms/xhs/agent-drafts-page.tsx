@@ -51,7 +51,7 @@ export function XhsAgentDraftsPage() {
     <>
       <PageHeader
         eyebrow="XHS · AI"
-        title="Agent 草稿生成"
+        title="AI助手"
         description="描述内容需求，生成多篇小红书草稿及配套图片。"
       />
 

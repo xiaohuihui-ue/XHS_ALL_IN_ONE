@@ -1,7 +1,7 @@
 import json
 import pytest
 from unittest.mock import MagicMock, patch
-from backend.app.services.ai_service import OpenAICompatibleTextClient
+from backend.app.services.ai_service import OpenAICompatibleTextClient, normalize_agent_topic
 from backend.app.models import ModelConfig
 
 
@@ -399,6 +399,49 @@ def test_generate_draft_titles_returns_topics():
     assert result["topics"] == ["低卡早餐", "健康饮食", "减脂餐"]
     assert result["recommended_title"] == "标题1"
     assert result["recommended_topic"] == "低卡早餐"
+
+
+def test_normalize_agent_topic_uses_xhs_character_count_rules():
+    """XHS topic length counts two English chars as one, CJK/emoji as one."""
+    value = "主题🙂AI🙂123456789012345678901234567890XYZ"
+
+    result = normalize_agent_topic(value)
+
+    assert result == "主题🙂AI🙂123456789012345678901234567890"
+
+
+def test_generate_draft_titles_normalizes_topic_characters_and_xhs_length():
+    """Generated topics are normalized and capped at 20 XHS characters."""
+    client = OpenAICompatibleTextClient()
+    cfg = _make_model_config()
+    messages = [{"role": "user", "content": "Generate breakfast drafts."}]
+
+    api_response = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "titles": ["标题1"],
+                    "topics": [
+                        "  🥗 低卡 Breakfast / 夏日轻食计划!!! 2026 ",
+                        "#AI 内容-选题 v2.0 ✅✅",
+                        "🔥🔥!!!",
+                    ],
+                })
+            }
+        }]
+    }
+    with patch("requests.post", return_value=_mock_response(api_response)):
+        result = client.generate_draft_titles(
+            model_config=cfg,
+            api_key="sk-test",
+            messages=messages,
+            n=1,
+            temperature=0.7,
+            top_p=1.0,
+        )
+
+    assert result["topics"] == ["🥗低卡Breakfast夏日轻食计划2026", "AI内容选题v20✅✅", "🔥🔥"]
+    assert result["recommended_topic"] == "🥗低卡Breakfast夏日轻食计划2026"
 
 
 def test_generate_single_draft_returns_12_layers():
@@ -834,6 +877,39 @@ def test_step_titles_returns_topics(tmp_path):
         assert "recommended_topic" in content
         assert content["topics"] == ["主题A", "主题B"]
         assert content["recommended_topic"] == "主题A"
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
+def test_step_titles_normalizes_topic_characters_and_xhs_length(tmp_path):
+    """step=titles API response normalizes topics from text clients."""
+    text_client = MagicMock()
+    text_client.generate_draft_titles.return_value = {
+        "titles": ["标题1"],
+        "recommended_title": "标题1",
+        "topics": [
+            "  🥗 低卡 Breakfast / 夏日轻食计划!!! 2026 ",
+            "#AI 内容-选题 v2.0 ✅✅",
+            "🔥🔥!!!",
+        ],
+        "recommended_topic": "  🥗 低卡 Breakfast / 夏日轻食计划!!! 2026 ",
+    }
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=False, text_client=text_client
+    )
+    try:
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json={
+            "messages": [{"role": "user", "content": "generate"}],
+            "n": 1,
+            "step": "titles",
+            "metadata": {"platform": "xhs"},
+            "image_options": {"n": 0},
+        })
+        assert response.status_code == 200
+        content = json.loads(response.json()["choices"][0]["message"]["content"])
+        assert content["topics"] == ["🥗低卡Breakfast夏日轻食计划2026", "AI内容选题v20✅✅", "🔥🔥"]
+        assert content["recommended_topic"] == "🥗低卡Breakfast夏日轻食计划2026"
     finally:
         _cleanup(engine, SessionLocal)
 

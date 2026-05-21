@@ -5,6 +5,7 @@ import base64
 import mimetypes
 import re
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -25,10 +26,91 @@ AOMENT_DEFAULT_IMAGE_MODEL = "image-n2-fast"
 AOMENT_IMAGE_MODELS = ("image-n2-fast", "image-n2", "image-n1-fast", "image-n1", "image-o2", "image-o2-pro")
 AOMENT_IMAGE_RECOGNITION_MODEL = "image-to-text"
 AOMENT_PROVIDERS = {"aoment", "aoment-api"}
+AGENT_TOPIC_MAX_LENGTH = 20
+AGENT_TOPIC_MAX_UNITS = AGENT_TOPIC_MAX_LENGTH * 2
 
 
 def is_aoment_provider(provider: str | None) -> bool:
     return (provider or "").strip().lower() in AOMENT_PROVIDERS
+
+
+def _is_emoji_codepoint(char: str) -> bool:
+    codepoint = ord(char)
+    return (
+        0x1F000 <= codepoint <= 0x1FAFF
+        or 0x2600 <= codepoint <= 0x27BF
+    )
+
+
+def _read_emoji_token(text: str, index: int) -> tuple[str, int]:
+    token = text[index]
+    index += 1
+
+    while index < len(text) and text[index] in ("\ufe0f", "\ufe0e"):
+        token += text[index]
+        index += 1
+    if index < len(text) and 0x1F3FB <= ord(text[index]) <= 0x1F3FF:
+        token += text[index]
+        index += 1
+
+    while index + 1 < len(text) and text[index] == "\u200d" and _is_emoji_codepoint(text[index + 1]):
+        token += text[index:index + 2]
+        index += 2
+        while index < len(text) and text[index] in ("\ufe0f", "\ufe0e"):
+            token += text[index]
+            index += 1
+        if index < len(text) and 0x1F3FB <= ord(text[index]) <= 0x1F3FF:
+            token += text[index]
+            index += 1
+
+    return token, index
+
+
+def normalize_agent_topic(value: Any, max_length: int = AGENT_TOPIC_MAX_LENGTH) -> str:
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    max_units = max_length * 2
+    units = 0
+    chars: list[str] = []
+    index = 0
+
+    while index < len(text):
+        char = text[index]
+        if _is_emoji_codepoint(char):
+            token, index = _read_emoji_token(text, index)
+            token_units = 2
+        else:
+            index += 1
+            if char in ("\ufe0f", "\ufe0e", "\u200d"):
+                continue
+            token = char
+            token_units = 1 if char.isascii() else 2
+
+        category = unicodedata.category(char)
+        if not _is_emoji_codepoint(char) and not category.startswith(("L", "N")):
+            continue
+        if units + token_units > max_units:
+            break
+        chars.append(token)
+        units += token_units
+
+    return "".join(chars)
+
+
+def normalize_agent_topics(values: Any, limit: int = 5) -> list[str]:
+    if not isinstance(values, list):
+        return []
+
+    seen: set[str] = set()
+    topics: list[str] = []
+    for value in values:
+        topic = normalize_agent_topic(value)
+        if not topic or topic in seen:
+            continue
+        seen.add(topic)
+        topics.append(topic)
+        if len(topics) >= limit:
+            break
+    return topics
 
 
 # ----------------------------------------------------------------------
@@ -578,6 +660,7 @@ class OpenAICompatibleTextClient:
             f"\n\n请生成 {n} 个小红书标题候选（每个少于20字）和3-5个主题方向。"
             "以JSON格式返回："
             '{"titles": ["标题1", "标题2", ...], "topics": ["主题1", "主题2", ...]}'
+            "\n主题按小红书长度规则控制在20字符内：2个英文/数字算1个字符，1个中文算1个字符，1个emoji算1个字符；去除空格和普通特殊字符。"
             "\n推荐标题填入 titles[0]，推荐主题填入 topics[0]。"
         )
         for i, msg in enumerate(prepared):
@@ -601,11 +684,11 @@ class OpenAICompatibleTextClient:
             if "titles" not in data or not isinstance(data["titles"], list):
                 raise ValueError("structured output missing 'titles' array")
             titles = data["titles"][:n]
-            topics = data.get("topics") or []
+            topics = normalize_agent_topics(data.get("topics") or [])
             return {
                 "titles": titles,
                 "recommended_title": titles[0] if titles else "",
-                "topics": topics[:5],
+                "topics": topics,
                 "recommended_topic": topics[0] if topics else "",
             }
         except (json.JSONDecodeError, ValueError) as exc:

@@ -43,7 +43,7 @@ export function XhsDashboard() {
 
   const metrics = [
     { label: "今日抓取", value: overview.today_crawls, icon: <DatabaseOutlined /> },
-    { label: "内容库笔记", value: overview.saved_notes, icon: <HeartOutlined /> },
+    { label: "我的收藏笔记", value: overview.saved_notes, icon: <HeartOutlined /> },
     { label: "待发布", value: overview.pending_publishes, icon: <ScheduleOutlined /> },
     { label: "健康账号", value: overview.healthy_accounts, icon: <SafetyCertificateOutlined /> },
   ];

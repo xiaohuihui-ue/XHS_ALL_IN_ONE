@@ -11,7 +11,7 @@ const sectionInfo: Record<string, { title: string; description: string }> = {
     description: "关键词搜索、URL 直达、账号笔记抓取和批量入库会在这里汇合。",
   },
   library: {
-    title: "内容库",
+    title: "我的收藏",
     description: "视觉笔记卡、标签、筛选、批量导出和素材下载的统一资产库。",
   },
   analytics: {

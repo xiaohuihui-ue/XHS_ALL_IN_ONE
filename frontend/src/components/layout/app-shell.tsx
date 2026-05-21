@@ -1,23 +1,17 @@
 import {
-  AimOutlined,
   BarChartOutlined,
   BellOutlined,
-  CloudDownloadOutlined,
-  DashboardOutlined,
   DatabaseOutlined,
   FileTextOutlined,
-  KeyOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoonOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
-  ScheduleOutlined,
   SearchOutlined,
   SendOutlined,
   ThunderboltOutlined,
-  StarOutlined,
   SunOutlined,
   UserOutlined,
   VideoCameraOutlined,
@@ -51,21 +45,15 @@ const { Sider, Header, Content } = Layout;
 const { Title, Text } = Typography;
 
 const mainNavItems: MenuProps["items"] = [
-  { key: "/platforms/xhs/dashboard", icon: <DashboardOutlined />, label: "总览" },
+  { key: "/platforms/xhs/agent-drafts", icon: <RobotOutlined />, label: "AI助手" },
   { key: "/platforms/xhs/accounts", icon: <SafetyCertificateOutlined />, label: "账号矩阵" },
   { key: "/platforms/xhs/discovery", icon: <SearchOutlined />, label: "笔记发现" },
-  { key: "/platforms/xhs/crawler", icon: <CloudDownloadOutlined />, label: "数据抓取" },
-  { key: "/platforms/xhs/keywords", icon: <KeyOutlined />, label: "关键词组" },
-  { key: "/platforms/xhs/benchmarks", icon: <AimOutlined />, label: "竞品监控" },
-  { key: "/platforms/xhs/image-studio", icon: <StarOutlined />, label: "图片工坊" },
-  { key: "/platforms/xhs/library", icon: <DatabaseOutlined />, label: "内容库" },
-  { key: "/platforms/xhs/drafts", icon: <FileTextOutlined />, label: "草稿工坊" },
-  { key: "/platforms/xhs/agent-drafts", icon: <RobotOutlined />, label: "Agent 草稿" },
+  { key: "/platforms/xhs/library", icon: <DatabaseOutlined />, label: "我的收藏" },
+  { key: "/platforms/xhs/drafts", icon: <FileTextOutlined />, label: "我的创作" },
   { key: "/platforms/xhs/publish", icon: <SendOutlined />, label: "发布中心" },
 ];
 
 const footerNavItems: MenuProps["items"] = [
-  { key: "/tasks", icon: <ScheduleOutlined />, label: "任务中心" },
   { key: "/models", icon: <RobotOutlined />, label: "模型配置" },
 ];
 

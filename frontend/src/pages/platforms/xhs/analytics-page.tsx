@@ -159,7 +159,7 @@ export function XhsAnalyticsPage() {
   }
 
   const metrics = [
-    { label: "内容库笔记", value: overview.saved_notes, icon: <FileTextOutlined /> },
+    { label: "我的收藏笔记", value: overview.saved_notes, icon: <FileTextOutlined /> },
     { label: "总互动", value: overview.total_engagement ?? 0, icon: <BarChartOutlined /> },
     { label: "已存评论", value: overview.comment_count ?? 0, icon: <CommentOutlined /> },
     { label: "话题数", value: hotTopics.length, icon: <TagsOutlined /> },
@@ -263,7 +263,7 @@ export function XhsAnalyticsPage() {
                     <span>高潜内容</span>
                   </Space>
                 }
-                extra={<Link to="/platforms/xhs/library">进入内容库</Link>}
+                extra={<Link to="/platforms/xhs/library">进入我的收藏</Link>}
                 style={{ background: "#1f1f1f", borderColor: "#303030", height: "100%" }}
                 styles={{ body: { padding: "12px 16px" } }}
               >

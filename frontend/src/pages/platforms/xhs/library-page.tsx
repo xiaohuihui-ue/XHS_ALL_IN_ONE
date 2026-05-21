@@ -207,7 +207,7 @@ export function XhsLibraryPage() {
       setNotes(r.items); setTotal(r.total);
       const ids = new Set(r.items.map((n) => n.id));
       setSelectedNoteIds((c) => c.filter((id) => ids.has(id)));
-    } catch { setError("内容库加载失败。"); } finally { setIsLoading(false); }
+    } catch { setError("我的收藏加载失败。"); } finally { setIsLoading(false); }
   }
 
   useEffect(() => { void loadNotes(); void loadTags(); }, []);
@@ -247,9 +247,9 @@ export function XhsLibraryPage() {
     if (!selectedNote) return; setIsCreatingDraft(true); setDetailActionMessage(null);
     try {
       const d = await createDraftFromNote({ platform: "xhs", source_note_id: selectedNote.id, intent: "rewrite" });
-      setDetailActionMessage(`已加入草稿工坊，草稿 #${d.id}。`);
+      setDetailActionMessage(`已加入我的创作，草稿 #${d.id}。`);
     }
-    catch { setDetailActionMessage("加入草稿工坊失败。"); } finally { setIsCreatingDraft(false); }
+    catch { setDetailActionMessage("加入我的创作失败。"); } finally { setIsCreatingDraft(false); }
   }
 
   async function handleDeleteNote(note: SavedNote) {
@@ -351,7 +351,7 @@ export function XhsLibraryPage() {
   return (
     <div>
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-        <Col><Title level={4} style={{ margin: 0 }}>内容库</Title><Text type="secondary">保存的笔记素材，支持标签、筛选、批量操作和导出</Text></Col>
+        <Col><Title level={4} style={{ margin: 0 }}>我的收藏</Title><Text type="secondary">收藏的笔记素材，支持标签、筛选、批量操作和导出</Text></Col>
         <Col><Button icon={<ReloadOutlined />} onClick={() => void loadNotes()} loading={isLoading}>刷新</Button></Col>
       </Row>
 
@@ -379,7 +379,7 @@ export function XhsLibraryPage() {
           <Space wrap>
             <Checkbox checked={notes.length > 0 && notes.every((n) => selectedNoteIdSet.has(n.id))} onChange={toggleVisibleSelection}>选择当前页</Checkbox>
             <Text strong>{selectedNoteIds.length} 条已选</Text>
-            <Button icon={<CheckSquareOutlined />} disabled={isBatchWorking || !selectedNoteIds.length} onClick={createBatchRewriteDrafts} size="small">批量加入草稿工坊</Button>
+            <Button icon={<CheckSquareOutlined />} disabled={isBatchWorking || !selectedNoteIds.length} onClick={createBatchRewriteDrafts} size="small">批量加入我的创作</Button>
             <Button type="primary" icon={<DownloadOutlined />} disabled={isBatchWorking || !selectedNoteIds.length} onClick={() => exportSelectedNotes("json")} size="small">JSON</Button>
             <Button icon={<DownloadOutlined />} disabled={isBatchWorking || !selectedNoteIds.length} onClick={() => exportSelectedNotes("csv")} size="small">CSV</Button>
             {latestExport && <Button icon={<DownloadOutlined />} disabled={isBatchWorking} onClick={downloadLatestExport} size="small">下载</Button>}
@@ -395,7 +395,7 @@ export function XhsLibraryPage() {
       {error && <Alert message={error} type="error" showIcon style={{ marginBottom: 16 }} />}
 
       {isLoading ? <Spin size="large" style={{ display: "block", textAlign: "center", margin: "48px 0" }} /> : notes.length === 0 ? (
-        <Empty description="内容库还是空的"><Link to="/platforms/xhs/discovery"><Button type="primary" icon={<BookOutlined />}>去发现笔记</Button></Link></Empty>
+        <Empty description="我的收藏还是空的"><Link to="/platforms/xhs/discovery"><Button type="primary" icon={<BookOutlined />}>去发现笔记</Button></Link></Empty>
       ) : viewMode === "table" ? (
         <Card size="small">
           <Table<SavedNote> columns={tableColumns} dataSource={notes} rowKey="id" size="small" pagination={{ pageSize: 20 }}
@@ -468,7 +468,7 @@ export function XhsLibraryPage() {
 
             <Space wrap style={{ marginBottom: 16 }}>
               <Button icon={<CopyOutlined />} onClick={copySelectedNote} size="small">复制内容</Button>
-              <Button icon={<FileAddOutlined />} onClick={addToDrafts} loading={isCreatingDraft} size="small">加入草稿工坊</Button>
+              <Button icon={<FileAddOutlined />} onClick={addToDrafts} loading={isCreatingDraft} size="small">加入我的创作</Button>
               <Button icon={<EditOutlined />} onClick={() => createDraft("rewrite")} loading={isCreatingDraft} size="small">AI 改写</Button>
               <Popconfirm title="确定删除？" onConfirm={() => void handleDeleteNote(selectedNote)}><Button danger icon={<DeleteOutlined />} size="small">删除</Button></Popconfirm>
             </Space>

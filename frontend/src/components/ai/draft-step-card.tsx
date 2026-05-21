@@ -48,6 +48,7 @@ export type ImagesStep = {
   status: "running" | "retrying" | "done" | "error";
   retryCount?: number;
   assets?: AgentDraftItem["assets"];
+  final_image_prompt?: string;
   iteration_history?: IterationRound[];
   image_quality_check?: ImageQualityCheck;
   errors?: string[];

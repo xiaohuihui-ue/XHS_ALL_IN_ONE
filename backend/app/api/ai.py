@@ -15,7 +15,14 @@ from backend.app.core.deps import get_current_user
 from backend.app.core.security import decrypt_text
 from backend.app.models import AiDraft, AiGeneratedAsset, DraftAsset, ModelConfig, Task, User
 from backend.app.schemas.common import paginated
-from backend.app.services.ai_service import ImageAiClient, ImageModelAdapterClient, OpenAICompatibleTextClient, TextAiClient
+from backend.app.services.ai_service import (
+    ImageAiClient,
+    ImageModelAdapterClient,
+    OpenAICompatibleTextClient,
+    TextAiClient,
+    normalize_agent_topic,
+    normalize_agent_topics,
+)
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -592,15 +599,24 @@ def agent_drafts_chat_completions(
             )
         except Exception as exc:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Title generation failed: {exc}") from exc
-        task = Task(user_id=current_user.id, platform="xhs", task_type="ai_agent_drafts_titles", status="completed", progress=100, payload={"titles": titles_result.get("titles", []), "topics": titles_result.get("topics", [])})
+        titles = titles_result.get("titles", [])
+        topics = normalize_agent_topics(titles_result.get("topics", []))
+        recommended_topic = normalize_agent_topic(titles_result.get("recommended_topic", ""))
+        if recommended_topic:
+            if recommended_topic not in topics:
+                topics = [recommended_topic, *topics][:5]
+        elif topics:
+            recommended_topic = topics[0]
+
+        task = Task(user_id=current_user.id, platform="xhs", task_type="ai_agent_drafts_titles", status="completed", progress=100, payload={"titles": titles, "topics": topics})
         db.add(task)
         db.commit()
         db.refresh(task)
         return _agent_drafts_response(task.id, payload.model, {
-            "titles": titles_result.get("titles", []),
+            "titles": titles,
             "recommended_title": titles_result.get("recommended_title", ""),
-            "topics": titles_result.get("topics", []),
-            "recommended_topic": titles_result.get("recommended_topic", ""),
+            "topics": topics,
+            "recommended_topic": recommended_topic,
         })
 
     # --- step=draft: generate single draft (body + tags + cover_strategy + image_prompt_spec + publish_tips) ---

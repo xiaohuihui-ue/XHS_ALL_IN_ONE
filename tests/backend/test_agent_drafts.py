@@ -332,7 +332,7 @@ def test_agent_drafts_image_failure_keeps_draft(tmp_path):
         tmp_path, with_image_model=True, text_client=text_client, image_client=image_client
     )
     try:
-        request = {**_VALID_REQUEST, "image_options": {"n": 1}}
+        request = {**_VALID_REQUEST, "image_options": {"n": 3}}
         client = TestClient(app)
         response = client.post("/api/ai/agent-drafts/chat/completions", json=request)
         assert response.status_code == 200
@@ -353,11 +353,52 @@ def test_agent_drafts_missing_image_model_when_images_requested(tmp_path):
 
     engine, SessionLocal = _override_app(tmp_path, with_image_model=False, text_client=text_client)
     try:
-        request = {**_VALID_REQUEST, "image_options": {"n": 1}}
+        request = {**_VALID_REQUEST, "image_options": {"n": 3}}
         client = TestClient(app)
         response = client.post("/api/ai/agent-drafts/chat/completions", json=request)
         assert response.status_code == 400
         assert "image model" in response.json()["detail"].lower()
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
+def test_agent_drafts_defaults_image_count_to_random_three_to_five(tmp_path):
+    text_client = MagicMock()
+    text_client.generate_agent_drafts.return_value = _TEXT_CLIENT_RESPONSE
+
+    image_client = MagicMock()
+    image_client.generate_image.return_value = {"url": "data:image/png;base64,abc"}
+
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=True, text_client=text_client, image_client=image_client
+    )
+    try:
+        request = {key: value for key, value in _VALID_REQUEST.items() if key != "image_options"}
+        client = TestClient(app)
+        response = client.post("/api/ai/agent-drafts/chat/completions", json=request)
+        assert response.status_code == 200
+        assert 3 <= image_client.generate_image.call_count <= 5
+
+        content = json.loads(response.json()["choices"][0]["message"]["content"])
+        assert len(content["items"][0]["assets"]) == image_client.generate_image.call_count
+    finally:
+        _cleanup(engine, SessionLocal)
+
+
+def test_agent_drafts_rejects_positive_image_count_outside_three_to_five(tmp_path):
+    text_client = MagicMock()
+    text_client.generate_agent_drafts.return_value = _TEXT_CLIENT_RESPONSE
+    image_client = MagicMock()
+    image_client.generate_image.return_value = {"url": "data:image/png;base64,abc"}
+
+    engine, SessionLocal = _override_app(
+        tmp_path, with_image_model=True, text_client=text_client, image_client=image_client
+    )
+    try:
+        client = TestClient(app)
+        request = {**_VALID_REQUEST, "image_options": {"n": 2}}
+        response = client.post("/api/ai/agent-drafts/chat/completions", json=request)
+        assert response.status_code == 422
     finally:
         _cleanup(engine, SessionLocal)
 

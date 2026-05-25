@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XHS_ALL_IN_ONE 框架设计文档</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --text: #172033;
+      --muted: #667085;
+      --line: #d9e0ea;
+      --soft: #eef3f8;
+      --brand: #d92d20;
+      --brand-soft: #fff0ed;
+      --code: #0f172a;
+      --code-bg: #f3f6fb;
+      --shadow: 0 16px 42px rgba(20, 30, 55, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.72;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--brand);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+
+    header {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 36px 40px;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--brand);
+      background: var(--brand-soft);
+      border: 1px solid #ffd2cb;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    h1 {
+      margin: 18px 0 10px;
+      font-size: 34px;
+      line-height: 1.22;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .meta span {
+      display: inline-flex;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    nav.toc {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 22px 24px;
+      margin-bottom: 24px;
+    }
+
+    nav.toc h2 {
+      margin-top: 0;
+    }
+
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px 18px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc-grid a {
+      display: block;
+      padding: 6px 0;
+      color: #344054;
+      border-bottom: 1px solid transparent;
+    }
+
+    main {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 34px 40px;
+    }
+
+    section {
+      padding: 10px 0 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 24px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 12px;
+      font-size: 18px;
+      line-height: 1.4;
+      letter-spacing: 0;
+    }
+
+    h4 {
+      margin: 20px 0 10px;
+      font-size: 16px;
+      line-height: 1.4;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    ul,
+    ol {
+      margin: 10px 0 10px 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    code {
+      color: var(--code);
+      background: var(--code-bg);
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 14px 0;
+      overflow-x: auto;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      padding: 16px 18px;
+      line-height: 1.55;
+      font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+      font-size: 13px;
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      padding: 0;
+    }
+
+    pre.mermaid {
+      background: #fbfcff;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--soft);
+      font-weight: 700;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: #fbfcff;
+    }
+
+    .note {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--brand);
+      background: var(--brand-soft);
+      border-radius: 6px;
+      color: #4a1d16;
+    }
+
+    .flow-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .flow-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcff;
+    }
+
+    .flow-item strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 18px 12px 36px;
+      }
+
+      header,
+      main {
+        padding: 24px 18px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      h2 {
+        font-size: 21px;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="eyebrow">框架设计文档</div>
+      <h1>XHS_ALL_IN_ONE 框架设计文档</h1>
+      <p class="subtitle">说明当前项目的整体框架、模块边界、核心业务流程、数据模型、安全设计和扩展方式。</p>
+      <div class="meta">
+        <span>生成日期：2026-05-09</span>
+        <span>项目：XHS_ALL_IN_ONE</span>
+        <span>格式：HTML</span>
+      </div>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+      <h2>目录</h2>
+      <ul class="toc-grid">
+        <li><a href="#purpose">1. 文档目的</a></li>
+        <li><a href="#positioning">2. 项目定位</a></li>
+        <li><a href="#architecture">3. 总体架构</a></li>
+        <li><a href="#stack">4. 技术栈</a></li>
+        <li><a href="#runtime">5. 运行拓扑</a></li>
+        <li><a href="#backend">6. 后端框架设计</a></li>
+        <li><a href="#frontend">7. 前端框架设计</a></li>
+        <li><a href="#data-model">8. 数据模型设计</a></li>
+        <li><a href="#flows">9. 核心业务流程</a></li>
+        <li><a href="#config">10. 配置设计</a></li>
+        <li><a href="#security">11. 安全设计</a></li>
+        <li><a href="#assets">12. 文件和资产设计</a></li>
+        <li><a href="#extension">13. 平台扩展设计</a></li>
+        <li><a href="#quality">14. 测试和质量保障</a></li>
+        <li><a href="#maintenance">15. 设计约束和维护建议</a></li>
+        <li><a href="#summary">16. 当前框架总结</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <section id="purpose">
+        <h2>1. 文档目的</h2>
+        <p>本文档面向项目维护者、二次开发者和部署人员，说明 <code>XHS_ALL_IN_ONE</code> 的整体框架、模块边界、核心业务流程、数据模型、安全设计和扩展方式。内容基于当前仓库代码结构编写，重点描述系统如何从小红书账号接入、数据采集、内容入库、AI 创作、素材处理到发布与自动运营形成闭环。</p>
+      </section>
+
+      <section id="positioning">
+        <h2>2. 项目定位</h2>
+        <p><code>XHS_ALL_IN_ONE</code> 是一个小红书一站式智能运营平台，目标是把以下能力整合到同一个 Web 产品中：</p>
+        <ul>
+          <li>多账号管理：PC 端账号、Creator 创作者账号登录、Cookie 导入和健康检查。</li>
+          <li>数据采集：关键词搜索、URL 抓取、用户笔记抓取、评论抓取和素材下载。</li>
+          <li>内容资产管理：统一内容库、标签、评论、素材、导出。</li>
+          <li>AI 创作：笔记改写、标题生成、标签生成、图片生成、封面生成、图片描述。</li>
+          <li>发布管理：草稿进入发布中心、素材上传 Creator、立即或定时发布。</li>
+          <li>自动运营：按关键词和频率自动搜索、改写、上传、发布。</li>
+          <li>数据洞察与竞品监控：统计概览、热点、趋势、监控目标刷新和快照。</li>
+        </ul>
+        <p>系统当前以小红书 <code>xhs</code> 为已启用平台，平台注册表预留了抖音、快手、微博、闲鱼、淘宝等后续扩展位。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>3. 总体架构</h2>
+        <h3>3.1 架构视图</h3>
+        <pre class="mermaid">flowchart LR
+    Browser[浏览器 React SPA] --> Axios[frontend/src/lib/api.ts]
+    Axios --> FastAPI[FastAPI API 层]
+    FastAPI --> Services[业务服务层]
+    FastAPI --> Core[核心基础设施]
+    Services --> Models[SQLAlchemy 数据模型]
+    Services --> Adapters[XHS 适配层]
+    Services --> AI[OpenAI 兼容模型服务]
+    Services --> Storage[本地媒体与导出存储]
+    Adapters --> SDK[根目录 apis/ SDK]
+    SDK --> Utils[xhs_utils 签名与 Cookie 工具]
+    Utils --> StaticJS[static/ 签名 JS]
+    Models --> DB[(SQLite 或 MySQL)]</pre>
+
+        <h3>3.2 分层原则</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>层级</th>
+              <th>主要目录</th>
+              <th>职责</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>启动与部署层</td>
+              <td><code>main.py</code>、<code>Dockerfile</code>、<code>docker-compose.yml</code>、<code>config/</code></td>
+              <td>本地和容器启动、前后端联动、配置加载、生产静态资源服务</td>
+            </tr>
+            <tr>
+              <td>前端应用层</td>
+              <td><code>frontend/src/</code></td>
+              <td>React SPA、页面路由、登录态维护、业务页面、用户交互</td>
+            </tr>
+            <tr>
+              <td>API 层</td>
+              <td><code>backend/app/api/</code></td>
+              <td>FastAPI 路由、请求校验、认证依赖、用户隔离、接口返回</td>
+            </tr>
+            <tr>
+              <td>业务服务层</td>
+              <td><code>backend/app/services/</code></td>
+              <td>AI 调用、调度任务、账号序列化、监控刷新、通知、图片工具、限流</td>
+            </tr>
+            <tr>
+              <td>核心基础设施层</td>
+              <td><code>backend/app/core/</code></td>
+              <td>配置、数据库、认证加密、平台注册、时间、进程内任务状态</td>
+            </tr>
+            <tr>
+              <td>数据模型层</td>
+              <td><code>backend/app/models/</code></td>
+              <td>SQLAlchemy ORM 模型和业务实体持久化</td>
+            </tr>
+            <tr>
+              <td>平台适配层</td>
+              <td><code>backend/app/adapters/xhs/</code></td>
+              <td>隔离小红书 PC、Creator、登录等 SDK 调用</td>
+            </tr>
+            <tr>
+              <td>底层 SDK 层</td>
+              <td><code>apis/</code>、<code>xhs_utils/</code>、<code>static/</code></td>
+              <td>小红书接口、签名、Cookie 转换、逆向 JS 执行</td>
+            </tr>
+            <tr>
+              <td>测试层</td>
+              <td><code>tests/backend/</code></td>
+              <td>后端 API、模型、路由、业务流和前端源码约束测试</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="stack">
+        <h2>4. 技术栈</h2>
+        <h3>4.1 后端</h3>
+        <ul>
+          <li>Python 3.10+</li>
+          <li>FastAPI：HTTP API、认证依赖、OpenAPI 文档。</li>
+          <li>Uvicorn：ASGI 运行时。</li>
+          <li>SQLAlchemy 2.x：ORM 和数据库访问。</li>
+          <li>Alembic：数据库迁移。</li>
+          <li>Pydantic / pydantic-settings：配置和数据校验。</li>
+          <li>APScheduler：定时发布、监控刷新、账号 Cookie 巡检等后台任务。</li>
+          <li>cryptography Fernet：Cookie 和 API Key 加密。</li>
+          <li>PyExecJS、Node.js、根目录 <code>static/*.js</code>：小红书签名相关执行环境。</li>
+          <li>requests、aiohttp：平台接口请求。</li>
+          <li>Pillow、OpenCV、numpy：图片处理能力。</li>
+        </ul>
+
+        <h3>4.2 前端</h3>
+        <ul>
+          <li>React 19</li>
+          <li>TypeScript</li>
+          <li>Vite 7</li>
+          <li>React Router 7</li>
+          <li>Ant Design 6</li>
+          <li>Axios</li>
+          <li>dnd-kit：素材拖拽排序。</li>
+          <li>Recharts：数据图表。</li>
+          <li>lucide-react、Ant Design Icons：图标体系。</li>
+        </ul>
+
+        <h3>4.3 存储与部署</h3>
+        <ul>
+          <li>开发默认 SQLite：<code>./data/spider_xhs.db</code></li>
+          <li>生产可切换 MySQL</li>
+          <li>本地文件存储：<code>backend/app/storage/media</code>、<code>backend/app/storage/exports</code></li>
+          <li>Docker 多阶段构建：先构建 Vite 前端，再复制到 Python 镜像并由后端静态托管。</li>
+        </ul>
+      </section>
+
+      <section id="runtime">
+        <h2>5. 运行拓扑</h2>
+        <h3>5.1 本地开发模式</h3>
+        <p>本地入口为根目录 <code>main.py</code>：</p>
+        <pre><code>python main.py --with-frontend</code></pre>
+        <p>启动过程：</p>
+        <ol>
+          <li>解析 CLI 参数，默认后端监听 <code>127.0.0.1:8000</code>。</li>
+          <li>如果带 <code>--with-frontend</code>，进入 <code>frontend/</code> 启动 Vite，默认端口 <code>5173</code>。</li>
+          <li>后端通过 Uvicorn 加载 <code>backend.app.main:app</code>。</li>
+          <li>前端使用 <code>frontend/src/lib/api.ts</code>，通过同源或代理访问 <code>/api</code> 接口。</li>
+        </ol>
+
+        <h3>5.2 容器和生产模式</h3>
+        <p>容器入口为 <code>Dockerfile</code>：</p>
+        <ol>
+          <li><code>node:20-alpine</code> 阶段执行 <code>frontend</code> 构建。</li>
+          <li><code>python:3.11-slim</code> 阶段安装 Python 依赖和 Node.js 运行时。</li>
+          <li>复制项目源码和 <code>frontend/dist</code>。</li>
+          <li>设置 <code>FRONTEND_SERVE_STATIC=true</code>，由 FastAPI 挂载构建后的前端资源。</li>
+          <li>健康检查访问 <code>http://localhost:8000/api/health</code>。</li>
+        </ol>
+        <p><code>docker-compose.yml</code> 默认启动单个 <code>app</code> 服务，并把数据、配置、媒体和导出目录映射到宿主机。MySQL 服务作为生产可选项保留在注释中。</p>
+      </section>
+
+      <section id="backend">
+        <h2>6. 后端框架设计</h2>
+        <h3>6.1 应用入口</h3>
+        <p><code>backend/app/main.py</code> 负责创建 FastAPI 应用：</p>
+        <ul>
+          <li>在 lifespan 中执行 <code>init_db()</code>，启动时自动运行 Alembic 迁移或创建表。</li>
+          <li>根据 <code>settings.scheduler_enabled</code> 决定是否启动 APScheduler。</li>
+          <li>注册 CORS。</li>
+          <li>暴露 <code>/api/health</code> 健康检查。</li>
+          <li>挂载所有业务路由。</li>
+          <li>生产模式下，使用 <code>StaticFiles</code> 托管 <code>frontend/dist</code>，并为非 API 路径提供 SPA fallback。</li>
+        </ul>
+
+        <h3>6.2 路由模块</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>模块</th>
+              <th>路由前缀</th>
+              <th>职责</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>auth.py</code></td><td><code>/api/auth</code></td><td>注册、登录、刷新令牌、登出、当前用户</td></tr>
+            <tr><td><code>platforms/registry.py</code></td><td><code>/api/platforms</code></td><td>平台元信息和启用状态</td></tr>
+            <tr><td><code>accounts.py</code></td><td><code>/api/accounts</code></td><td>账号列表、Cookie 导入、健康检查、账号更新和删除</td></tr>
+            <tr><td><code>login_sessions.py</code></td><td><code>/api/xhs/login-sessions</code></td><td>XHS PC / Creator 二维码登录、手机验证码登录、登录状态轮询</td></tr>
+            <tr><td><code>platforms/xhs/pc.py</code></td><td><code>/api/xhs/pc</code></td><td>小红书 PC 搜索、笔记详情、评论、用户笔记、首页推荐</td></tr>
+            <tr><td><code>platforms/xhs/creator.py</code></td><td><code>/api/xhs/creator</code></td><td>Creator 话题、地点、素材上传、图文或视频发布、已发布作品</td></tr>
+            <tr><td><code>platforms/xhs/crawl.py</code></td><td><code>/api/xhs/crawl</code></td><td>批量搜索、URL、用户笔记和数据流式抓取</td></tr>
+            <tr><td><code>notes.py</code></td><td><code>/api/notes</code></td><td>内容库、素材、评论、批量保存、打标签、导出、批量建草稿</td></tr>
+            <tr><td><code>tags.py</code></td><td><code>/api/tags</code></td><td>用户标签 CRUD</td></tr>
+            <tr><td><code>keyword_groups.py</code></td><td><code>/api/keyword-groups</code></td><td>关键词分组 CRUD</td></tr>
+            <tr><td><code>drafts.py</code></td><td><code>/api/drafts</code></td><td>AI 草稿、草稿素材、送入发布中心</td></tr>
+            <tr><td><code>ai.py</code></td><td><code>/api/ai</code></td><td>文本改写、生成标题、生成标签、图片生成、图片描述</td></tr>
+            <tr><td><code>model_configs.py</code></td><td><code>/api/model-configs</code></td><td>OpenAI 兼容模型配置、默认模型、连通性测试</td></tr>
+            <tr><td><code>publish.py</code></td><td><code>/api/publish</code></td><td>发布任务、发布素材、上传素材、立即或定时发布、重试、取消</td></tr>
+            <tr><td><code>tasks.py</code></td><td><code>/api/tasks</code></td><td>任务审计、调度器状态、运行到期任务、任务重试和取消</td></tr>
+            <tr><td><code>notifications.py</code></td><td><code>/api/notifications</code></td><td>通知列表、已读、全部已读</td></tr>
+            <tr><td><code>platforms/xhs/analytics.py</code></td><td><code>/api/xhs/analytics</code></td><td>概览、Top 内容、热点、趋势、评论洞察、报告、竞品草稿</td></tr>
+            <tr><td><code>platforms/xhs/monitoring.py</code></td><td><code>/api/xhs/monitoring</code></td><td>监控目标 CRUD、刷新、笔记和快照</td></tr>
+            <tr><td><code>auto_tasks.py</code></td><td><code>/api/auto-tasks</code></td><td>自动运营任务 CRUD 和手动执行</td></tr>
+            <tr><td><code>files.py</code></td><td><code>/api/files</code></td><td>文件上传、媒体下载、导出下载、图片合成和缩放</td></tr>
+          </tbody>
+        </table>
+
+        <h3>6.3 核心基础设施</h3>
+        <h4>配置系统</h4>
+        <p><code>backend/app/core/config.py</code> 使用 <code>Settings</code> 统一管理配置，加载顺序为：</p>
+        <ol>
+          <li><code>config/default.yaml</code></li>
+          <li><code>CONFIG_FILE</code> 指定的 YAML</li>
+          <li><code>.env</code></li>
+          <li>环境变量</li>
+        </ol>
+        <p>关键配置包括数据库连接、JWT 与 Fernet 密钥、服务监听地址、CORS、调度器开关和前端静态托管路径。</p>
+
+        <h4>数据库与迁移</h4>
+        <p><code>backend/app/core/database.py</code> 提供全局 SQLAlchemy <code>engine</code> 和 <code>SessionLocal</code>。启动时会创建 SQLite 数据目录，执行 Alembic 迁移；在 Alembic 不可用时回退到 <code>Base.metadata.create_all()</code>。该模块还包含模型名称规范化和 SQLite 时间字段向 Asia/Shanghai 对齐的兼容性处理。</p>
+
+        <h4>安全与加密</h4>
+        <p><code>backend/app/core/security.py</code> 提供 PBKDF2-SHA256 密码哈希、HMAC-SHA256 令牌、Access Token、Refresh Token 和 Fernet 加解密能力。Access Token 默认 15 分钟过期，Refresh Token 默认 7 天过期。Cookie 和 API Key 等敏感信息通过 Fernet 加密。</p>
+
+        <h4>平台注册</h4>
+        <p><code>backend/app/core/platforms.py</code> 定义平台枚举和平台元信息。当前 <code>xhs</code> 启用，其它平台以 <code>coming_soon</code> 形式存在，前端可通过 <code>/api/platforms</code> 读取该注册表并展示平台入口。</p>
+
+        <h3>6.4 服务层</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>服务</th>
+              <th>职责</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>account_service.py</code></td><td>Cookie 文本解析、账号资料归一化、登录后 upsert 平台账号、账号序列化</td></tr>
+            <tr><td><code>ai_service.py</code></td><td>OpenAI 兼容文本与图片模型客户端、请求组装、结果解析</td></tr>
+            <tr><td><code>scheduler_service.py</code></td><td>到期发布、监控刷新、自动运营任务、Cookie 健康检查、调度器启动与关闭</td></tr>
+            <tr><td><code>monitoring_crawl_service.py</code></td><td>根据监控目标选择账号、抓取目标内容、生成快照</td></tr>
+            <tr><td><code>notification_service.py</code></td><td>任务失败、账号过期、发布失败、监控暂停等通知创建</td></tr>
+            <tr><td><code>asset_downloader.py</code></td><td>远程图片或视频下载到本地媒体目录</td></tr>
+            <tr><td><code>image_util.py</code></td><td>封面合成、图片缩放等本地图片处理</td></tr>
+            <tr><td><code>rate_limiter.py</code></td><td>抓取接口简单限流</td></tr>
+            <tr><td><code>platform_service.py</code></td><td>平台列表聚合</td></tr>
+            <tr><td><code>task_service.py</code></td><td>任务列表兼容接口</td></tr>
+          </tbody>
+        </table>
+
+        <h3>6.5 XHS 适配层</h3>
+        <p><code>backend/app/adapters/xhs/</code> 是 Web 后端和底层 SDK 的隔离层：</p>
+        <ul>
+          <li><code>pc_api_adapter.py</code>：封装 PC 端搜索、笔记详情、评论、用户笔记、自身账号信息。</li>
+          <li><code>creator_api_adapter.py</code>：封装 Creator 话题、地点、素材上传、发布、已发布作品。</li>
+          <li><code>pc_login_adapter.py</code>、<code>creator_login_adapter.py</code>：封装二维码和手机登录流程。</li>
+          <li><code>request_env.py</code>：在直接请求 XHS 时临时处理代理环境，避免系统代理干扰底层 SDK。</li>
+        </ul>
+        <p>上层 API 不直接依赖 <code>apis/</code> 的具体实现，而是通过 adapter 调用。这样可以把签名、Cookie 转换、逆向请求等易变逻辑限定在适配边界内。</p>
+      </section>
+
+      <section id="frontend">
+        <h2>7. 前端框架设计</h2>
+        <h3>7.1 应用入口和路由</h3>
+        <p>前端入口为 <code>frontend/src/main.tsx</code>，路由集中在 <code>frontend/src/app/router.tsx</code>。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>路由</th>
+              <th>页面或职责</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>/login</code></td><td>登录页，只允许未登录用户访问</td></tr>
+            <tr><td><code>/platform-select</code></td><td>平台选择页，需要登录</td></tr>
+            <tr><td><code>/platforms/:platformId</code></td><td>未启用平台的 Coming Soon 页面</td></tr>
+            <tr><td><code>/platforms/xhs/dashboard</code></td><td>小红书总览</td></tr>
+            <tr><td><code>/platforms/xhs/accounts</code></td><td>账号矩阵</td></tr>
+            <tr><td><code>/platforms/xhs/analytics</code></td><td>数据洞察</td></tr>
+            <tr><td><code>/platforms/xhs/discovery</code></td><td>笔记发现</td></tr>
+            <tr><td><code>/platforms/xhs/crawler</code></td><td>数据抓取</td></tr>
+            <tr><td><code>/platforms/xhs/keywords</code></td><td>关键词分组</td></tr>
+            <tr><td><code>/platforms/xhs/library</code></td><td>内容库</td></tr>
+            <tr><td><code>/platforms/xhs/drafts</code></td><td>草稿工坊</td></tr>
+            <tr><td><code>/platforms/xhs/benchmarks</code></td><td>竞品相关能力</td></tr>
+            <tr><td><code>/platforms/xhs/image-studio</code></td><td>图片工坊</td></tr>
+            <tr><td><code>/platforms/xhs/video-studio</code></td><td>视频工坊</td></tr>
+            <tr><td><code>/platforms/xhs/publish</code></td><td>发布中心</td></tr>
+            <tr><td><code>/platforms/xhs/auto-ops</code></td><td>自动运营</td></tr>
+            <tr><td><code>/tasks</code></td><td>任务中心</td></tr>
+            <tr><td><code>/models</code></td><td>模型配置</td></tr>
+            <tr><td><code>/settings</code></td><td>设置页</td></tr>
+          </tbody>
+        </table>
+
+        <h3>7.2 前端分层</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>目录</th>
+              <th>职责</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>frontend/src/app/</code></td><td>路由和全局 Provider</td></tr>
+            <tr><td><code>frontend/src/components/layout/</code></td><td>应用壳、侧边栏、平台选择器和全局布局</td></tr>
+            <tr><td><code>frontend/src/components/account/</code></td><td>二维码登录、手机号登录、Cookie 导入等账号组件</td></tr>
+            <tr><td><code>frontend/src/components/platforms/</code></td><td>平台级复用页面和 Coming Soon</td></tr>
+            <tr><td><code>frontend/src/components/ui/</code></td><td>认证保护路由等通用 UI 能力</td></tr>
+            <tr><td><code>frontend/src/pages/</code></td><td>业务页面</td></tr>
+            <tr><td><code>frontend/src/lib/</code></td><td>API 客户端、时间工具、平台 fallback 元数据</td></tr>
+            <tr><td><code>frontend/src/types/</code></td><td>TypeScript 类型定义</td></tr>
+            <tr><td><code>frontend/src/global.css</code></td><td>全局样式</td></tr>
+          </tbody>
+        </table>
+
+        <h3>7.3 API 客户端和认证态</h3>
+        <p><code>frontend/src/lib/api.ts</code> 统一封装后端请求：</p>
+        <ul>
+          <li>Axios 实例默认 <code>baseURL</code> 为 <code>/api</code>。</li>
+          <li>Access Token 存在模块内存中。</li>
+          <li>Refresh Token 存在 <code>localStorage</code> 的 <code>spider_xhs_refresh_token</code>。</li>
+          <li>请求拦截器自动添加 <code>Authorization: Bearer &lt;token&gt;</code>。</li>
+          <li>响应拦截器在 401 时尝试刷新 Access Token。</li>
+          <li>刷新失败时清空登录态并提示重新登录。</li>
+        </ul>
+        <p>前端业务页面只调用 <code>api.ts</code> 中的函数，不直接拼接底层请求细节。</p>
+      </section>
+
+      <section id="data-model">
+        <h2>8. 数据模型设计</h2>
+        <h3>8.1 实体总览</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>实体</th>
+              <th>表名</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>User</code></td><td><code>users</code></td><td>平台用户，所有业务数据按 <code>user_id</code> 隔离</td></tr>
+            <tr><td><code>PlatformAccount</code></td><td><code>platform_accounts</code></td><td>XHS PC / Creator 等平台账号</td></tr>
+            <tr><td><code>AccountCookieVersion</code></td><td><code>account_cookie_versions</code></td><td>平台账号 Cookie 的加密版本历史</td></tr>
+            <tr><td><code>LoginSession</code></td><td><code>login_sessions</code></td><td>二维码或手机登录会话状态</td></tr>
+            <tr><td><code>Note</code></td><td><code>notes</code></td><td>内容库笔记主表</td></tr>
+            <tr><td><code>NoteAsset</code></td><td><code>note_assets</code></td><td>笔记图片或视频素材</td></tr>
+            <tr><td><code>NoteComment</code></td><td><code>note_comments</code></td><td>笔记评论</td></tr>
+            <tr><td><code>Tag</code></td><td><code>tags</code></td><td>用户自定义标签</td></tr>
+            <tr><td><code>note_tags</code></td><td><code>note_tags</code></td><td>笔记与标签多对多关系</td></tr>
+            <tr><td><code>KeywordGroup</code></td><td><code>keyword_groups</code></td><td>自动运营和分析用关键词分组</td></tr>
+            <tr><td><code>ModelConfig</code></td><td><code>model_configs</code></td><td>OpenAI 兼容模型配置，API Key 加密存储</td></tr>
+            <tr><td><code>AiDraft</code></td><td><code>ai_drafts</code></td><td>AI 草稿和编辑器内容</td></tr>
+            <tr><td><code>DraftAsset</code></td><td><code>draft_assets</code></td><td>草稿素材</td></tr>
+            <tr><td><code>AiGeneratedAsset</code></td><td><code>ai_generated_assets</code></td><td>AI 生成图片资产</td></tr>
+            <tr><td><code>PublishJob</code></td><td><code>publish_jobs</code></td><td>发布任务</td></tr>
+            <tr><td><code>PublishAsset</code></td><td><code>publish_assets</code></td><td>发布素材和 Creator 上传状态</td></tr>
+            <tr><td><code>Task</code></td><td><code>tasks</code></td><td>后台任务审计记录</td></tr>
+            <tr><td><code>Notification</code></td><td><code>notifications</code></td><td>用户通知</td></tr>
+            <tr><td><code>MonitoringTarget</code></td><td><code>monitoring_targets</code></td><td>竞品或关键词监控目标</td></tr>
+            <tr><td><code>MonitoringSnapshot</code></td><td><code>monitoring_snapshots</code></td><td>监控目标快照</td></tr>
+            <tr><td><code>AutoTask</code></td><td><code>auto_tasks</code></td><td>自动运营配置和执行状态</td></tr>
+            <tr><td><code>ApiLog</code></td><td><code>api_logs</code></td><td>API 调用或平台调用日志</td></tr>
+          </tbody>
+        </table>
+
+        <h3>8.2 关系设计</h3>
+        <pre class="mermaid">erDiagram
+    users ||--o{ platform_accounts : owns
+    users ||--o{ notes : owns
+    users ||--o{ ai_drafts : owns
+    users ||--o{ publish_jobs : owns
+    users ||--o{ tasks : owns
+    users ||--o{ notifications : owns
+    users ||--o{ monitoring_targets : owns
+    users ||--o{ auto_tasks : owns
+
+    platform_accounts ||--o{ account_cookie_versions : has
+    platform_accounts ||--o{ notes : captures
+    platform_accounts ||--o{ publish_jobs : publishes
+
+    notes ||--o{ note_assets : has
+    notes ||--o{ note_comments : has
+    notes }o--o{ tags : tagged
+    notes ||--o{ ai_drafts : source
+
+    ai_drafts ||--o{ draft_assets : has
+    ai_drafts ||--o{ publish_jobs : source
+    ai_drafts ||--o{ ai_generated_assets : has
+
+    publish_jobs ||--o{ publish_assets : has
+    tasks ||--o{ notifications : source
+    monitoring_targets ||--o{ monitoring_snapshots : has</pre>
+
+        <h3>8.3 数据隔离规则</h3>
+        <p>后端大多数业务表都有 <code>user_id</code> 字段，API 层通过 <code>get_current_user</code> 获取当前用户，并在查询、更新、删除和执行操作时强制用户范围过滤。跨用户访问通常返回 403 或 404，避免账号、笔记、草稿、发布任务、监控目标等资源被越权访问。</p>
+      </section>
+
+      <section id="flows">
+        <h2>9. 核心业务流程</h2>
+        <h3>9.1 登录认证流程</h3>
+        <pre class="mermaid">sequenceDiagram
+    participant UI as 前端
+    participant API as /api/auth
+    participant DB as users
+
+    UI->>API: register 或 login
+    API->>DB: 查询或创建用户
+    API->>API: 校验密码，生成 access_token 和 refresh_token
+    API-->>UI: 返回令牌
+    UI->>UI: access token 存内存，refresh token 存 localStorage
+    UI->>API: 后续请求携带 Bearer token
+    API->>API: decode_token 并加载当前用户</pre>
+
+        <h3>9.2 平台账号接入流程</h3>
+        <p>账号接入有三条路径：</p>
+        <ul>
+          <li>二维码登录：创建 <code>LoginSession</code>，返回二维码，前端轮询，确认后保存账号和 Cookie。</li>
+          <li>手机验证码登录：发送验证码，确认后保存账号和 Cookie。</li>
+          <li>Cookie 导入：前端粘贴 Cookie，后端解析并执行账号资料刷新。</li>
+        </ul>
+        <p>落库策略：</p>
+        <ol>
+          <li><code>PlatformAccount</code> 保存账号基本资料、平台、子类型、状态和资料 JSON。</li>
+          <li><code>AccountCookieVersion</code> 保存加密 Cookie，每次登录或导入创建新版本。</li>
+          <li>健康检查通过 adapter 调用平台自我资料接口，更新账号状态和资料。</li>
+        </ol>
+
+        <h3>9.3 笔记采集到内容库流程</h3>
+        <pre class="mermaid">flowchart TD
+    A[选择 XHS PC 账号] --> B[关键词搜索或 URL 抓取]
+    B --> C[XhsPcApiAdapter 调用 apis SDK]
+    C --> D[API 归一化笔记结果]
+    D --> E[前端展示发现列表或抓取结果]
+    E --> F[批量保存到内容库]
+    F --> G[notes 主表 upsert]
+    G --> H[保存 note_assets 和 note_comments]
+    H --> I[可打标签、导出、进入草稿]</pre>
+        <p>设计要点：</p>
+        <ul>
+          <li>搜索、详情、评论等 XHS 原始结果会在 API 层被归一化为前端可消费结构。</li>
+          <li>内容库按当前平台用户隔离，不绑定某个单一 XHS 账号。</li>
+          <li>保存笔记时可刷新重复笔记，避免同一外部 <code>note_id</code> 重复堆积。</li>
+          <li>媒体可以只保留远程 URL，也可以下载到本地 <code>storage/media</code>。</li>
+        </ul>
+
+        <h3>9.4 内容库到 AI 草稿流程</h3>
+        <pre class="mermaid">flowchart LR
+    Note[内容库 Note] --> Draft[AiDraft]
+    NoteAsset[NoteAsset] --> DraftAsset[DraftAsset]
+    Draft --> AIRewrite[AI 改写/标题/标签]
+    AIRewrite --> Draft
+    Draft --> ImageAI[AI 图片生成/封面/描述]
+    ImageAI --> GeneratedAsset[AiGeneratedAsset]
+    GeneratedAsset --> DraftAsset</pre>
+        <p>设计要点：</p>
+        <ul>
+          <li><code>AiDraft.source_note_id</code> 记录草稿来源。</li>
+          <li>草稿正文、标题、标签和素材顺序可独立编辑。</li>
+          <li>文本和图片 AI 都通过 <code>ModelConfig</code> 选择默认模型。</li>
+          <li>API Key 使用 Fernet 加密存储。</li>
+        </ul>
+
+        <h3>9.5 发布流程</h3>
+        <pre class="mermaid">sequenceDiagram
+    participant UI as 发布中心
+    participant API as /api/publish
+    participant DB as publish_jobs
+    participant Adapter as XhsCreatorApiAdapter
+    participant XHS as Creator API
+
+    UI->>API: 从草稿创建发布任务
+    API->>DB: 创建 PublishJob 和 PublishAsset
+    UI->>API: 上传素材或发起发布
+    API->>Adapter: 使用 Creator Cookie 上传媒体
+    Adapter->>XHS: upload_media
+    XHS-->>Adapter: creator_media_id
+    Adapter-->>API: 上传结果
+    API->>DB: 更新 PublishAsset
+    API->>Adapter: post_note
+    Adapter->>XHS: 创建图文或视频笔记
+    XHS-->>Adapter: 外部发布结果
+    API->>DB: 更新 PublishJob 状态、external_note_id、published_at</pre>
+        <p>发布状态通常围绕以下阶段变化：</p>
+        <ul>
+          <li><code>pending</code>：待发布。</li>
+          <li><code>scheduled</code>：定时发布待执行。</li>
+          <li><code>running</code>：正在上传或发布。</li>
+          <li><code>published</code>：发布成功。</li>
+          <li><code>failed</code>：发布失败，可重试。</li>
+          <li><code>cancelled</code>：用户取消。</li>
+        </ul>
+
+        <h3>9.6 定时任务和自动运营</h3>
+        <p><code>scheduler_service.py</code> 统一承担后台周期任务：</p>
+        <ul>
+          <li>执行到期的 <code>PublishJob</code>。</li>
+          <li>刷新到期的 <code>MonitoringTarget</code>。</li>
+          <li>执行到期的 <code>AutoTask</code>。</li>
+          <li>定期检查账号 Cookie 健康状态并生成通知。</li>
+        </ul>
+        <p>自动运营任务的典型流水线：</p>
+        <ol>
+          <li>根据 <code>AutoTask.keywords</code> 选取关键词。</li>
+          <li>使用 PC 账号搜索热门笔记。</li>
+          <li>将候选内容保存或转为草稿。</li>
+          <li>通过默认文本模型改写标题和正文。</li>
+          <li>复制或处理素材。</li>
+          <li>使用 Creator 账号创建发布任务并发布。</li>
+          <li>更新 <code>total_published</code>、<code>last_run_at</code>、<code>next_run_at</code>。</li>
+        </ol>
+
+        <h3>9.7 监控和分析流程</h3>
+        <p>监控目标支持关键词、账号、品牌、URL 等类型。刷新时会：</p>
+        <ol>
+          <li>选择目标指定账号或用户可用 PC 账号。</li>
+          <li>根据目标类型抓取最新内容。</li>
+          <li>将匹配笔记保存为内容库记录。</li>
+          <li>生成 <code>MonitoringSnapshot</code>。</li>
+          <li>累计失败时记录错误并可触发通知。</li>
+        </ol>
+        <p>分析接口基于当前用户的内容库、标签、评论、监控目标和关键词分组生成统计视图，包括概览、Top 内容、热点主题、互动趋势、关键词趋势、评论洞察和导出报告。</p>
+      </section>
+
+      <section id="config">
+        <h2>10. 配置设计</h2>
+        <h3>10.1 默认配置</h3>
+        <p><code>config/default.yaml</code> 面向本地开发：</p>
+        <ul>
+          <li>后端监听 <code>0.0.0.0:8000</code>。</li>
+          <li>CORS 允许 <code>localhost:5173</code>、<code>localhost:3000</code>、<code>127.0.0.1:5173</code>。</li>
+          <li>数据库默认 SQLite。</li>
+          <li>调度器默认关闭。</li>
+          <li>前端静态托管默认关闭。</li>
+        </ul>
+
+        <h3>10.2 生产配置</h3>
+        <p><code>config/production.yaml</code> 面向容器或服务器部署：</p>
+        <ul>
+          <li>数据库类型为 MySQL。</li>
+          <li>调度器开启，默认 30 秒间隔。</li>
+          <li>前端静态托管开启。</li>
+          <li><code>secret_key</code>、<code>mysql_password</code> 等敏感值应由环境变量覆盖。</li>
+        </ul>
+
+        <h3>10.3 配置优先级</h3>
+        <p>配置优先级从低到高：</p>
+        <pre><code>config/default.yaml &lt; CONFIG_FILE 指定文件 &lt; .env &lt; 环境变量</code></pre>
+      </section>
+
+      <section id="security">
+        <h2>11. 安全设计</h2>
+        <h3>11.1 认证和会话</h3>
+        <ul>
+          <li>用户密码不明文保存，使用 PBKDF2-SHA256 哈希。</li>
+          <li>Access Token 短期有效，Refresh Token 长期有效。</li>
+          <li>前端 Access Token 存内存，降低本地持久化泄露面。</li>
+          <li>Refresh Token 存 <code>localStorage</code>，接口 401 时自动刷新。</li>
+        </ul>
+
+        <h3>11.2 敏感信息加密</h3>
+        <ul>
+          <li>XHS Cookie 使用 <code>AccountCookieVersion.encrypted_cookies</code> 加密保存。</li>
+          <li>模型 API Key 使用 <code>ModelConfig.encrypted_api_key</code> 加密保存。</li>
+          <li>Fernet key 可显式配置，未配置时从 <code>secret_key</code> 派生。</li>
+        </ul>
+
+        <h3>11.3 权限边界</h3>
+        <ul>
+          <li>后端 API 以当前 <code>User</code> 为核心权限边界。</li>
+          <li>所有账号、笔记、标签、草稿、发布、任务、通知、模型配置、监控和自动运营数据都需要用户范围过滤。</li>
+          <li>对跨用户资源执行读取、修改、删除或运行时调用时，应返回拒绝或不存在。</li>
+        </ul>
+
+        <h3>11.4 外部平台调用隔离</h3>
+        <ul>
+          <li>XHS SDK 调用集中在 <code>backend/app/adapters/xhs/</code>。</li>
+          <li><code>direct_xhs_request_env()</code> 用于控制直接访问 XHS 时的请求环境。</li>
+          <li>上层业务不直接操作签名 JS 和逆向请求细节。</li>
+        </ul>
+      </section>
+
+      <section id="assets">
+        <h2>12. 文件和资产设计</h2>
+        <h3>12.1 媒体文件</h3>
+        <p>媒体文件主要存放在：</p>
+        <pre><code>backend/app/storage/media</code></pre>
+        <p>典型来源：</p>
+        <ul>
+          <li>用户上传的图片或视频。</li>
+          <li>从 XHS 下载的笔记素材。</li>
+          <li>AI 生成图片。</li>
+          <li>图片合成或缩放后的结果。</li>
+        </ul>
+        <p>后端通过 <code>/api/files/media/{file_name}</code> 提供下载。</p>
+
+        <h3>12.2 导出文件</h3>
+        <p>导出文件主要存放在：</p>
+        <pre><code>backend/app/storage/exports</code></pre>
+        <p>典型来源：</p>
+        <ul>
+          <li>内容库 JSON / CSV 导出。</li>
+          <li>分析报告导出。</li>
+          <li>抓取结果导出。</li>
+        </ul>
+        <p>后端通过 <code>/api/files/exports/{file_name}</code> 提供下载。</p>
+      </section>
+
+      <section id="extension">
+        <h2>13. 平台扩展设计</h2>
+        <p>后续新增平台时，建议按以下顺序扩展：</p>
+        <ol>
+          <li>在 <code>backend/app/core/platforms.py</code> 添加或启用平台元信息。</li>
+          <li>新增 <code>backend/app/adapters/&lt;platform&gt;/</code>，隔离该平台 SDK 或 API 细节。</li>
+          <li>新增 <code>backend/app/api/platforms/&lt;platform&gt;/</code> 路由模块。</li>
+          <li>复用通用表：<code>platform_accounts</code>、<code>notes</code>、<code>ai_drafts</code>、<code>publish_jobs</code>、<code>tasks</code>。</li>
+          <li>在前端 <code>frontend/src/pages/platforms/&lt;platform&gt;/</code> 添加平台页面。</li>
+          <li>在 <code>frontend/src/app/router.tsx</code> 接入路由。</li>
+          <li>在 <code>frontend/src/lib/api.ts</code> 添加平台 API 客户端函数。</li>
+          <li>添加后端测试，覆盖账号归属、跨用户拒绝、平台调用适配和核心业务流。</li>
+        </ol>
+        <p>扩展时应保持两个边界：</p>
+        <ul>
+          <li>平台差异放在 adapter 和平台专属 API 中。</li>
+          <li>内容库、草稿、发布、任务、通知、模型配置尽量复用通用模型。</li>
+        </ul>
+      </section>
+
+      <section id="quality">
+        <h2>14. 测试和质量保障</h2>
+        <p>当前测试主要位于 <code>tests/backend/</code>，覆盖范围包括：</p>
+        <ul>
+          <li>根目录启动参数解析和前端启动命令。</li>
+          <li>健康检查和平台注册表。</li>
+          <li>数据库初始化、Alembic 迁移和兼容性迁移。</li>
+          <li>用户注册、登录、刷新令牌和认证失败。</li>
+          <li>XHS 二维码登录、手机登录、账号导入和健康检查。</li>
+          <li>XHS 搜索、详情、评论、抓取和归一化。</li>
+          <li>内容库保存、资产、评论、标签、导出和跨用户隔离。</li>
+          <li>AI 模型配置、文本生成、图片生成和资产作用域。</li>
+          <li>发布任务、发布素材、上传、发布、定时、重试、取消。</li>
+          <li>调度器、到期任务、自动刷新和通知。</li>
+          <li>监控目标、分析、关键词趋势和竞品草稿。</li>
+          <li>前端关键页面源码约束，例如 Ant Design 使用、页面功能保持等。</li>
+        </ul>
+        <p>推荐的基础校验命令：</p>
+        <pre><code>pytest tests/backend
+cd frontend &amp;&amp; npm run build</code></pre>
+        <p>如果只修改文档，可执行文件存在性和 HTML 可读性校验；如果修改后端或前端业务代码，应至少运行对应后端测试和前端构建。</p>
+      </section>
+
+      <section id="maintenance">
+        <h2>15. 设计约束和维护建议</h2>
+        <ul>
+          <li>不建议业务层直接调用根目录 <code>apis/</code>，应通过 <code>backend/app/adapters/</code>。</li>
+          <li>不建议在前端页面中散落 Axios 请求，应集中到 <code>frontend/src/lib/api.ts</code>。</li>
+          <li>新增持久化表时应同步添加 SQLAlchemy 模型和 Alembic 迁移。</li>
+          <li>新增用户资源时必须带 <code>user_id</code> 或明确的归属校验。</li>
+          <li>新增外部平台调用时必须记录失败状态，避免后台任务无声失败。</li>
+          <li>调度任务应写入 <code>tasks</code> 或更新业务状态，便于任务中心审计。</li>
+          <li>涉及 Cookie、API Key、Token 的数据必须加密或短期化。</li>
+          <li>自动运营、发布和监控属于高风险外部调用，应优先增加可重试、可取消、可观测状态。</li>
+          <li>前端新增页面时应接入 <code>ProtectedRoute</code> 和 <code>AppShell</code>，保持统一导航和登录态。</li>
+        </ul>
+      </section>
+
+      <section id="summary">
+        <h2>16. 当前框架总结</h2>
+        <p>当前项目采用清晰的前后端分离架构：React/Vite 提供运营控制台，FastAPI 提供统一业务 API，SQLAlchemy 负责持久化，APScheduler 承担定时任务，XHS 平台能力通过 adapter 层隔离到底层 SDK。核心业务围绕 <code>User</code> 做数据隔离，围绕 <code>PlatformAccount</code> 接入外部账号，围绕 <code>Note -&gt; AiDraft -&gt; PublishJob</code> 形成内容生产和发布闭环。</p>
+        <p>该框架适合继续向两个方向演进：</p>
+        <ul>
+          <li>横向扩展更多平台：通过平台注册表、adapter、平台 API 和前端平台页面扩展。</li>
+          <li>纵向增强自动运营：在现有任务、通知、发布、监控和 AI 模型配置基础上增强调度策略、失败恢复和效果评估。</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: "default"
+    });
+  </script>
+</body>
+</html>

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 from collections.abc import Callable
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,19 @@ from backend.app.services.ai_service import (
 )
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+MIN_IMAGES_PER_DRAFT = 3
+MAX_IMAGES_PER_DRAFT = 5
+
+
+def _default_images_per_draft() -> int:
+    return random.randint(MIN_IMAGES_PER_DRAFT, MAX_IMAGES_PER_DRAFT)
+
+
+def _validate_images_per_draft(value: int) -> int:
+    if value == 0 or MIN_IMAGES_PER_DRAFT <= value <= MAX_IMAGES_PER_DRAFT:
+        return value
+    raise ValueError("image_options.n must be 0 or between 3 and 5")
 
 
 class RewriteNoteRequest(BaseModel):
@@ -91,11 +105,16 @@ class _AgentMessage(BaseModel):
 
 class _ImageOptions(BaseModel):
     model: str | None = None
-    n: int = Field(default=1, ge=0, le=3)
+    n: int = Field(default_factory=_default_images_per_draft, ge=0, le=MAX_IMAGES_PER_DRAFT)
     size: str | None = None
     quality: str | None = None
     style: str | None = None
     response_format: str | None = None
+
+    @field_validator("n")
+    @classmethod
+    def validate_n(cls, value: int) -> int:
+        return _validate_images_per_draft(value)
 
 
 class _AgentMetadata(BaseModel):

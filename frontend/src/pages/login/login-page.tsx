@@ -102,7 +102,8 @@ export function LoginPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#0a0a0a",
+        background: "var(--color-background-primary)",
+        color: "var(--color-text-primary)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -155,7 +156,7 @@ export function LoginPage() {
           <Title
             level={2}
             style={{
-              color: "#fff",
+              color: "var(--color-text-primary)",
               marginBottom: 12,
               lineHeight: 1.4,
             }}
@@ -181,7 +182,7 @@ export function LoginPage() {
                   </Space>
                 }
                 value={128}
-                valueStyle={{ color: "#fff", fontSize: 28 }}
+                valueStyle={{ color: "var(--color-text-primary)", fontSize: 28 }}
               />
             </Col>
             <Col span={8}>
@@ -193,7 +194,7 @@ export function LoginPage() {
                   </Space>
                 }
                 value={14}
-                valueStyle={{ color: "#fff", fontSize: 28 }}
+                valueStyle={{ color: "var(--color-text-primary)", fontSize: 28 }}
               />
             </Col>
             <Col span={8}>
@@ -205,7 +206,7 @@ export function LoginPage() {
                   </Space>
                 }
                 value={7}
-                valueStyle={{ color: "#fff", fontSize: 28 }}
+                valueStyle={{ color: "var(--color-text-primary)", fontSize: 28 }}
               />
             </Col>
           </Row>
@@ -215,8 +216,8 @@ export function LoginPage() {
         <Col xs={24} md={12}>
           <Card
             style={{
-              background: "#1a1a1a",
-              borderColor: "#303030",
+              background: "var(--color-background-secondary)",
+              borderColor: "var(--color-border)",
               borderRadius: 12,
             }}
             styles={{
@@ -229,7 +230,7 @@ export function LoginPage() {
               style={{ marginBottom: 20 }}
             >
               <LockOutlined
-                style={{ fontSize: 16, color: "rgba(255,255,255,0.65)" }}
+                style={{ fontSize: 16, color: "var(--color-text-secondary)" }}
               />
               <Text strong style={{ fontSize: 15 }}>
                 {mode === "login" ? "平台登录" : "注册平台账号"}
@@ -295,7 +296,7 @@ export function LoginPage() {
                   <div style={{ textAlign: "right", marginBottom: 16 }}>
                     <Link
                       to="/forgot-password"
-                      style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}
+                      style={{ fontSize: 12, color: "var(--color-text-muted)" }}
                     >
                       忘记密码？
                     </Link>

@@ -71,6 +71,12 @@ import {
   updateDraftAsset,
   uploadAssetFile,
 } from "../../../lib/api";
+import {
+  getRandomImagesPerDraft,
+  MAX_IMAGES_PER_DRAFT,
+  MIN_IMAGES_PER_DRAFT,
+  normalizeImagesPerDraft,
+} from "../../../lib/image-count";
 import { formatShanghaiTime } from "../../../lib/time";
 import type { DraftAsset } from "../../../lib/api";
 import { useDraftGeneration } from "../../../hooks/use-draft-generation";
@@ -231,7 +237,7 @@ export function XhsDraftsPage() {
   const [refPickerOpen, setRefPickerOpen] = useState(false);
   const [refPickerUrlInput, setRefPickerUrlInput] = useState("");
 
-  const [imagesPerDraft, setImagesPerDraft] = useState(1);
+  const [imagesPerDraft, setImagesPerDraft] = useState(() => getRandomImagesPerDraft());
   const { steps: genSteps, running: genRunning, run: genRun, stop: genStop } = useDraftGeneration();
   const prevGenRunningRef = useRef(false);
 
@@ -1310,10 +1316,10 @@ export function XhsDraftsPage() {
             </Form.Item>
             <Form.Item label="每篇图片数">
               <InputNumber
-                min={3}
-                max={5}
+                min={MIN_IMAGES_PER_DRAFT}
+                max={MAX_IMAGES_PER_DRAFT}
                 value={imagesPerDraft}
-                onChange={(v) => setImagesPerDraft(v ?? 0)}
+                onChange={(v) => setImagesPerDraft(normalizeImagesPerDraft(v))}
                 style={{ width: 80 }}
               />
             </Form.Item>

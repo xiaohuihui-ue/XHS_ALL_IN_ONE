@@ -8,6 +8,7 @@ import type {
   IterationRound,
   ImageQualityCheck,
 } from "../types";
+import { getRandomImagesPerDraft } from "../lib/image-count";
 import { generateAgentDrafts, uploadAssetFile } from "../lib/api";
 import { withRetry } from "../lib/retry";
 
@@ -121,7 +122,8 @@ export function useDraftGeneration() {
   const abortRef = useRef(false);
 
   const run = useCallback(async (options: DraftGenerationOptions) => {
-    const { mode, refImages, draftCount = 3, imagesPerDraft = 1 } = options;
+    const { mode, refImages, draftCount = 3 } = options;
+    const imagesPerDraft = options.imagesPerDraft ?? getRandomImagesPerDraft();
     abortRef.current = false;
     setRunning(true);
     setSteps([]);

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import time
 from contextvars import ContextVar
 from typing import Any, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
 from backend.app.models.ai_http_log import AiHttpLog, RequestType
+
+logger = logging.getLogger(__name__)
 
 # 线程/协程安全的上下文变量，用于传递当前 task_id
 _current_task_id: ContextVar[Optional[int]] = ContextVar("current_task_id", default=None)
@@ -50,6 +54,44 @@ def _truncate_text_response(body: dict) -> dict:
     except Exception:
         pass
     return truncated
+
+
+def _request_type_value(request_type: RequestType | str) -> str:
+    return request_type.value if isinstance(request_type, RequestType) else str(request_type)
+
+
+def _image_request_summary(body: dict[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    model = body.get("model")
+    if model:
+        summary["model"] = model
+    prompt = body.get("prompt")
+    if isinstance(prompt, str):
+        summary["prompt_chars"] = len(prompt)
+    image = body.get("image")
+    if isinstance(image, list):
+        summary["image_refs"] = len(image)
+    elif image:
+        summary["image_refs"] = 1
+    return summary
+
+
+def log_ai_http_progress(stage: str, **fields: Any) -> None:
+    parts = [stage]
+    for key, value in fields.items():
+        if value is None:
+            continue
+        if key == "url" and isinstance(value, str):
+            try:
+                parsed = urlsplit(value)
+                value = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+            except Exception:
+                pass
+        text = str(value).replace("\n", " ").replace("\r", " ")
+        if len(text) > 200:
+            text = text[:197] + "..."
+        parts.append(f"{key}={text}")
+    logger.warning("[AI HTTP] %s", " ".join(parts))
 
 
 class _LoggedResponse:
@@ -114,7 +156,7 @@ class _LoggedResponse:
 def ai_http_log(
     *,
     task_id: Optional[int],
-    request_type: RequestType,
+    request_type: RequestType | str,
     url: str,
     request_body: dict,
 ) -> _LoggedResponse:
@@ -135,11 +177,12 @@ def ai_http_log(
     masked_body = _mask_api_key(request_body)
     timeout = masked_body.pop("_timeout", 60)
     headers = masked_body.pop("_headers", {"Content-Type": "application/json"})
+    request_type_value = _request_type_value(request_type)
 
     log_record: dict[str, Any] = {
         "_start_time": time.time(),
         "task_id": effective_task_id,
-        "request_type": request_type.value if isinstance(request_type, RequestType) else request_type,
+        "request_type": request_type_value,
         "method": "POST",
         "url": url,
         "request_body": masked_body,
@@ -151,10 +194,39 @@ def ai_http_log(
 
     raw_resp: Optional[requests.Response] = None
     exc: Optional[Exception] = None
+    should_log_progress = request_type_value == RequestType.IMAGE.value
+    if should_log_progress:
+        log_ai_http_progress(
+            "send-start",
+            type=request_type_value,
+            task_id=effective_task_id if effective_task_id is not None else "-",
+            url=url,
+            timeout=f"{timeout}s",
+            **_image_request_summary(masked_body),
+        )
     try:
         raw_resp = requests.post(url, headers=headers, json=masked_body, timeout=timeout)
     except Exception as e:
         exc = e
+        if should_log_progress:
+            log_ai_http_progress(
+                "send-error",
+                type=request_type_value,
+                task_id=effective_task_id if effective_task_id is not None else "-",
+                url=url,
+                duration_ms=int((time.time() - log_record["_start_time"]) * 1000),
+                error=e,
+            )
+    else:
+        if should_log_progress:
+            log_ai_http_progress(
+                "send-end",
+                type=request_type_value,
+                task_id=effective_task_id if effective_task_id is not None else "-",
+                url=url,
+                status=raw_resp.status_code if raw_resp is not None else "-",
+                duration_ms=int((time.time() - log_record["_start_time"]) * 1000),
+            )
 
     logged = _LoggedResponse(raw_resp, log_record["request_type"], log_record)
     logged._finalize(exc)

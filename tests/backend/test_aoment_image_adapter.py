@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from backend.app.models import ModelConfig
 from backend.app.services.ai_service import (
     AOMENT_API_BASE_URL,
@@ -53,6 +55,31 @@ def test_aoment_text_to_image_uses_fixed_base_url_and_polls_record(monkeypatch):
         "showInWebCreating": False,
     }
     assert calls[1]["url"] == f"{AOMENT_API_BASE_URL}/records/api_task_1"
+
+
+def test_aoment_generation_emits_submit_and_poll_progress_logs(monkeypatch, caplog):
+    def fake_post(url, *, headers=None, json=None, data=None, files=None, timeout=None):
+        assert "aoment-submit-start provider=aoment model=image-o2-pro references=0" in caplog.text
+        return _FakeResponse({"success": True, "recordId": "api_task_log", "status": "processing"})
+
+    def fake_get(url, *, headers=None, timeout=None):
+        assert "aoment-poll-start record_id=api_task_log attempt=1/1" in caplog.text
+        return _FakeResponse({"success": True, "recordId": "api_task_log", "status": "success", "imageUrl": "https://cos.example.com/result.jpg"})
+
+    monkeypatch.setattr("backend.app.services.ai_service.requests.post", fake_post)
+    monkeypatch.setattr("backend.app.services.ai_service.requests.get", fake_get)
+
+    with caplog.at_level(logging.WARNING):
+        result = AomentImageClient(poll_interval_seconds=0, max_poll_attempts=1).generate_image(
+            model_config=ModelConfig(provider="aoment", model_name="image-o2-pro", base_url=""),
+            api_key="aoment_test_key",
+            prompt="warm modern living room",
+        )
+
+    assert result["url"] == "https://cos.example.com/result.jpg"
+    assert "aoment-submit-end provider=aoment model=image-o2-pro status=200" in caplog.text
+    assert "aoment-poll-success record_id=api_task_log attempt=1 status=success" in caplog.text
+    assert "aoment_test_key" not in caplog.text
 
 
 def test_aoment_image_to_image_uses_multipart_images(tmp_path, monkeypatch):

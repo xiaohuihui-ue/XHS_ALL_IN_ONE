@@ -118,6 +118,18 @@ def get_drafts(
     return paginated([_serialize_draft(draft) for draft in drafts], page, page_size)
 
 
+@router.get("/{draft_id}")
+def get_draft(
+    draft_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    draft = db.get(AiDraft, draft_id)
+    if draft is None or draft.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found")
+    return _serialize_draft(draft)
+
+
 @router.post("")
 def create_draft(
     payload: DraftCreateRequest,

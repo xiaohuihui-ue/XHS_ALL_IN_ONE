@@ -482,6 +482,11 @@ export async function createDraftFromNote(payload: CreateDraftPayload): Promise<
   return response.data;
 }
 
+export async function fetchDraft(draftId: number): Promise<Draft> {
+  const response = await http.get<Draft>(`/drafts/${draftId}`);
+  return response.data;
+}
+
 export async function fetchDrafts(platform = "xhs"): Promise<Paginated<Draft>> {
   const response = await http.get<Paginated<Draft>>("/drafts", { params: { platform } });
   return response.data;

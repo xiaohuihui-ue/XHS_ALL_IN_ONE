@@ -32,6 +32,7 @@ import {
   MIN_IMAGES_PER_DRAFT,
   normalizeImagesPerDraft,
 } from "../../../lib/image-count";
+import { fetchDraftAssets } from "../../../lib/api";
 import type { WorkflowStep } from "../../../hooks/use-draft-generation";
 
 const { Text } = Typography;
@@ -53,6 +54,9 @@ type AssistantHistoryItem = {
   status: AssistantHistoryStatus;
   steps: WorkflowStep[];
 };
+
+type RecoveredImageAssets = NonNullable<Extract<WorkflowStep, { type: "images" }>["assets"]>;
+type RecoverableImageStep = { stepIndex: number; draftId: number };
 
 function createHistoryId() {
   return `agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -118,6 +122,67 @@ function formatRelativeTime(value: string) {
   return `${weeks}周`;
 }
 
+function findRecoverableImageSteps(steps: WorkflowStep[]): RecoverableImageStep[] {
+  return steps.flatMap((step, stepIndex) => {
+    if (step.type !== "images") return [];
+    const status = step.status;
+    const isStuck = status === "running" || step.status === "retrying" || step.status === "error";
+    if (!isStuck || (step.assets?.length ?? 0) > 0) return [];
+
+    const draftStep = steps.find((candidate) => candidate.type === "draft" && candidate.index === step.index);
+    if (draftStep?.type !== "draft" || !draftStep.draft_id) return [];
+
+    return [{ stepIndex, draftId: draftStep.draft_id }];
+  });
+}
+
+async function recoverStuckImageSteps(item: AssistantHistoryItem): Promise<AssistantHistoryItem | null> {
+  const targets = findRecoverableImageSteps(item.steps);
+  if (targets.length === 0) return null;
+
+  const recovered = await Promise.all(
+    targets.map(async (target) => {
+      try {
+        const result = await fetchDraftAssets(target.draftId);
+        const assets = result.items
+          .filter((asset) => asset.asset_type === "image")
+          .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id) as RecoveredImageAssets;
+        return assets.length > 0 ? { ...target, assets } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const recoveredByStepIndex = new Map(
+    recovered
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      .map((entry) => [entry.stepIndex, entry]),
+  );
+  if (recoveredByStepIndex.size === 0) return null;
+
+  const nextSteps = item.steps.map((step, stepIndex) => {
+    const recoveredStep = recoveredByStepIndex.get(stepIndex);
+    if (!recoveredStep || step.type !== "images") return step;
+    return {
+      ...step,
+      draft_id: recoveredStep.draftId,
+      status: "done" as const,
+      retryCount: undefined,
+      error: undefined,
+      assets: recoveredStep.assets,
+      errors: [],
+    };
+  });
+
+  return {
+    ...item,
+    updatedAt: new Date().toISOString(),
+    status: getHistoryStatus(nextSteps, false),
+    steps: nextSteps,
+  };
+}
+
 export function XhsAgentDraftsPage() {
   const [request, setRequest] = useState("");
   const [draftCount, setDraftCount] = useState(3);
@@ -126,6 +191,7 @@ export function XhsAgentDraftsPage() {
   const [historyItems, setHistoryItems] = useState<AssistantHistoryItem[]>(() => loadAssistantHistory());
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(() => loadAssistantHistory()[0]?.id ?? null);
   const currentRunIdRef = useRef<string | null>(null);
+  const recoveringHistoryIdsRef = useRef(new Set<string>());
 
   const { steps, running, run, stop } = useDraftGeneration();
   const selectedHistoryItem = useMemo(
@@ -137,6 +203,42 @@ export function XhsAgentDraftsPage() {
 
   useEffect(() => {
     saveAssistantHistory(historyItems);
+  }, [historyItems]);
+
+  useEffect(() => {
+    const recoverableItems = historyItems.filter(
+      (item) =>
+        findRecoverableImageSteps(item.steps).length > 0 &&
+        !recoveringHistoryIdsRef.current.has(item.id),
+    );
+    if (recoverableItems.length === 0) return;
+
+    let cancelled = false;
+    recoverableItems.forEach((item) => {
+      recoveringHistoryIdsRef.current.add(item.id);
+      void recoverStuckImageSteps(item)
+        .then((recovered) => {
+          if (!recovered || cancelled) return;
+          setHistoryItems((items) =>
+            items.map((current) =>
+              current.id === recovered.id
+                ? {
+                    ...current,
+                    ...recovered,
+                    title: toHistoryTitle(current.request, recovered.steps),
+                  }
+                : current,
+            ),
+          );
+        })
+        .finally(() => {
+          recoveringHistoryIdsRef.current.delete(item.id);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [historyItems]);
 
   useEffect(() => {

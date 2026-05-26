@@ -1,3 +1,4 @@
+import logging
 import os
 from unittest.mock import MagicMock, patch
 
@@ -118,6 +119,47 @@ class TestAiHttpLogSuccess:
                 assert log_obj.task_id == 99
                 assert log_obj.request_type == "image"
                 assert log_obj.duration_ms is not None
+
+    def test_image_request_emits_progress_before_and_after_http_call(self, caplog):
+        from backend.app.services.http_logging import ai_http_log
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"data": [{"url": "http://img.example.com/cat.jpg"}]}
+        mock_resp.raise_for_status = MagicMock()
+        log_seen_during_post: list[str] = []
+
+        def fake_post(*args, **kwargs):
+            log_seen_during_post.append(caplog.text)
+            return mock_resp
+
+        with caplog.at_level(logging.WARNING):
+            with patch("requests.post", side_effect=fake_post):
+                with patch(
+                    "backend.app.core.database.SessionLocal"
+                ) as MockSession:
+                    mock_db = MagicMock()
+                    MockSession.return_value = mock_db
+
+                    ai_http_log(
+                        task_id=99,
+                        request_type="image",
+                        url="http://api.example.com/images",
+                        request_body={
+                            "_headers": {"Authorization": "Bearer sk-secret", "Content-Type": "application/json"},
+                            "model": "dall-e-3",
+                            "prompt": "a cute cat",
+                            "_timeout": 180,
+                        },
+                    )
+
+        assert log_seen_during_post
+        assert "send-start type=image task_id=99 url=http://api.example.com/images timeout=180s" in log_seen_during_post[0]
+        assert "model=dall-e-3" in log_seen_during_post[0]
+        assert "prompt_chars=10" in log_seen_during_post[0]
+        assert "send-end type=image task_id=99 url=http://api.example.com/images status=200" in caplog.text
+        assert "sk-secret" not in caplog.text
+        assert "a cute cat" not in caplog.text
 
     def test_error_logged(self):
         from backend.app.services.http_logging import ai_http_log

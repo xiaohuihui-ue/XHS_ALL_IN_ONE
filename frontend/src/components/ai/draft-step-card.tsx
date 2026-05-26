@@ -1,9 +1,10 @@
 import {
   CheckCircleOutlined,
+  EyeOutlined,
   ExclamationCircleOutlined,
   LoadingOutlined,
 } from "@ant-design/icons";
-import { Alert, Image, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Image, Space, Spin, Tag, Typography } from "antd";
 
 import type {
   AgentDraftItem,
@@ -46,6 +47,7 @@ export type ImagesStep = {
   index: number;
   title: string;
   status: "running" | "retrying" | "done" | "error";
+  draft_id?: number;
   retryCount?: number;
   assets?: AgentDraftItem["assets"];
   final_image_prompt?: string;
@@ -102,6 +104,18 @@ export function DraftStepCard({ step }: { step: WorkflowStep }) {
         <Text style={{ fontSize: 13, fontWeight: 500 }}>{label}</Text>
         {isRetrying && (
           <Tag color="orange" style={{ fontSize: 11 }}>重试中 ({step.retryCount}/3)…</Tag>
+        )}
+        {step.type === "draft" && step.status === "done" && step.draft_id && (
+          <Button
+            size="small"
+            type="link"
+            icon={<EyeOutlined />}
+            href={`/platforms/xhs/drafts/${step.draft_id}/preview`}
+            target="_blank"
+            style={{ height: 22, paddingInline: 0, fontSize: 12 }}
+          >
+            预览页
+          </Button>
         )}
       </Space>
 

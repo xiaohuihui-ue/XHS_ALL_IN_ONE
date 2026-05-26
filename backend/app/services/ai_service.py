@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from unittest.mock import MagicMock
 
 from backend.app.models import ModelConfig
-from backend.app.services.http_logging import ai_http_log, set_current_task_id
+from backend.app.services.http_logging import ai_http_log, log_ai_http_progress, set_current_task_id
 from backend.app.models.ai_http_log import RequestType
 
 from backend.app.models import ModelConfig
@@ -1399,7 +1399,24 @@ class AomentImageClient(OpenAICompatibleImageClient):
             return (f"reference-{index}.{cls._mime_to_extension(mime)}", base64.b64decode(encoded), mime)
 
         if resolved.startswith("http://") or resolved.startswith("https://"):
-            response = requests.get(resolved, timeout=60)
+            log_ai_http_progress("aoment-reference-download-start", index=index, url=resolved, timeout="60s")
+            started_at = time.time()
+            try:
+                response = requests.get(resolved, timeout=60)
+            except Exception as exc:
+                log_ai_http_progress(
+                    "aoment-reference-download-error",
+                    index=index,
+                    duration_ms=int((time.time() - started_at) * 1000),
+                    error=exc,
+                )
+                raise
+            log_ai_http_progress(
+                "aoment-reference-download-end",
+                index=index,
+                status=response.status_code,
+                duration_ms=int((time.time() - started_at) * 1000),
+            )
             response.raise_for_status()
             mime = response.headers.get("Content-Type", "image/png").split(";", 1)[0]
             path_name = Path(urlparse(resolved).path).name or f"reference-{index}.{cls._mime_to_extension(mime)}"
@@ -1419,19 +1436,55 @@ class AomentImageClient(OpenAICompatibleImageClient):
     def _await_image_record(self, *, record_id: str, api_key: str, submit_payload: dict[str, Any]) -> dict[str, Any]:
         headers = self._aoment_headers(api_key)
         for attempt in range(self.max_poll_attempts):
-            response = requests.get(f"{AOMENT_API_BASE_URL}/records/{record_id}", headers=headers, timeout=60)
+            attempt_no = attempt + 1
+            record_url = f"{AOMENT_API_BASE_URL}/records/{record_id}"
+            log_ai_http_progress(
+                "aoment-poll-start",
+                record_id=record_id,
+                attempt=f"{attempt_no}/{self.max_poll_attempts}",
+                url=record_url,
+                timeout="60s",
+            )
+            started_at = time.time()
+            try:
+                response = requests.get(record_url, headers=headers, timeout=60)
+            except Exception as exc:
+                log_ai_http_progress(
+                    "aoment-poll-error",
+                    record_id=record_id,
+                    attempt=attempt_no,
+                    duration_ms=int((time.time() - started_at) * 1000),
+                    error=exc,
+                )
+                raise
+            log_ai_http_progress(
+                "aoment-poll-end",
+                record_id=record_id,
+                attempt=attempt_no,
+                status=response.status_code,
+                duration_ms=int((time.time() - started_at) * 1000),
+            )
             response.raise_for_status()
             payload = response.json()
             self._raise_for_aoment_error(payload)
             status = payload.get("status")
             if status == "success":
+                log_ai_http_progress("aoment-poll-success", record_id=record_id, attempt=attempt_no, status=status)
                 image_url = payload.get("imageUrl")
                 if not isinstance(image_url, str) or not image_url:
                     raise ValueError("Aoment record response missing imageUrl")
                 return {"url": image_url, "raw": {"submit": submit_payload, "record": payload}}
             if status == "failed":
+                log_ai_http_progress("aoment-poll-failed", record_id=record_id, attempt=attempt_no, status=status)
                 raise ValueError(f"Aoment image generation failed: {payload.get('error') or payload}")
             if attempt < self.max_poll_attempts - 1 and self.poll_interval_seconds > 0:
+                log_ai_http_progress(
+                    "aoment-poll-wait",
+                    record_id=record_id,
+                    attempt=attempt_no,
+                    status=status or "unknown",
+                    sleep_seconds=self.poll_interval_seconds,
+                )
                 time.sleep(self.poll_interval_seconds)
         raise TimeoutError(f"Aoment image generation timed out for record {record_id}")
 
@@ -1465,23 +1518,60 @@ class AomentImageClient(OpenAICompatibleImageClient):
             "aspectRatio": "1:1",
             "imageSize": "2K",
         }
-        if reference_images:
-            response = requests.post(
-                endpoint,
-                headers=self._aoment_headers(api_key),
-                data={**common_fields, "showInWebCreating": "false"},
-                files=self._build_upload_files(reference_images),
-                timeout=180,
+        references = reference_images or []
+        log_ai_http_progress(
+            "aoment-submit-start",
+            provider="aoment",
+            model=model_name,
+            references=len(references),
+            url=endpoint,
+            timeout="180s",
+            prompt_chars=len(prompt),
+        )
+        started_at = time.time()
+        try:
+            if references:
+                response = requests.post(
+                    endpoint,
+                    headers=self._aoment_headers(api_key),
+                    data={**common_fields, "showInWebCreating": "false"},
+                    files=self._build_upload_files(references),
+                    timeout=180,
+                )
+            else:
+                response = requests.post(
+                    endpoint,
+                    headers=self._aoment_headers(api_key, json_request=True),
+                    json={**common_fields, "showInWebCreating": False},
+                    timeout=180,
+                )
+        except Exception as exc:
+            log_ai_http_progress(
+                "aoment-submit-error",
+                provider="aoment",
+                model=model_name,
+                duration_ms=int((time.time() - started_at) * 1000),
+                error=exc,
             )
-        else:
-            response = requests.post(
-                endpoint,
-                headers=self._aoment_headers(api_key, json_request=True),
-                json={**common_fields, "showInWebCreating": False},
-                timeout=180,
-            )
+            raise
+        log_ai_http_progress(
+            "aoment-submit-end",
+            provider="aoment",
+            model=model_name,
+            status=response.status_code,
+            duration_ms=int((time.time() - started_at) * 1000),
+        )
         response.raise_for_status()
-        return self._submit_payload_to_result(payload=response.json(), api_key=api_key)
+        payload = response.json()
+        log_ai_http_progress(
+            "aoment-submit-json",
+            provider="aoment",
+            model=model_name,
+            record_id=payload.get("recordId") or "-",
+            status=payload.get("status") or "-",
+            has_image_url=bool(payload.get("imageUrl")),
+        )
+        return self._submit_payload_to_result(payload=payload, api_key=api_key)
 
     def describe_image(
         self,
@@ -1492,12 +1582,40 @@ class AomentImageClient(OpenAICompatibleImageClient):
         instruction: str,
     ) -> str:
         self._validate(model_config=model_config, api_key=api_key)
-        response = requests.post(
-            f"{AOMENT_API_BASE_URL}/image/recognitions",
-            headers=self._aoment_headers(api_key),
-            data={"prompt": instruction or "Describe this image.", "model": AOMENT_IMAGE_RECOGNITION_MODEL},
-            files=self._build_upload_files([image_url]),
-            timeout=120,
+        endpoint = f"{AOMENT_API_BASE_URL}/image/recognitions"
+        log_ai_http_progress(
+            "aoment-recognition-start",
+            provider="aoment",
+            model=AOMENT_IMAGE_RECOGNITION_MODEL,
+            references=1,
+            url=endpoint,
+            timeout="120s",
+            prompt_chars=len(instruction or "Describe this image."),
+        )
+        started_at = time.time()
+        try:
+            response = requests.post(
+                endpoint,
+                headers=self._aoment_headers(api_key),
+                data={"prompt": instruction or "Describe this image.", "model": AOMENT_IMAGE_RECOGNITION_MODEL},
+                files=self._build_upload_files([image_url]),
+                timeout=120,
+            )
+        except Exception as exc:
+            log_ai_http_progress(
+                "aoment-recognition-error",
+                provider="aoment",
+                model=AOMENT_IMAGE_RECOGNITION_MODEL,
+                duration_ms=int((time.time() - started_at) * 1000),
+                error=exc,
+            )
+            raise
+        log_ai_http_progress(
+            "aoment-recognition-end",
+            provider="aoment",
+            model=AOMENT_IMAGE_RECOGNITION_MODEL,
+            status=response.status_code,
+            duration_ms=int((time.time() - started_at) * 1000),
         )
         response.raise_for_status()
         payload = response.json()

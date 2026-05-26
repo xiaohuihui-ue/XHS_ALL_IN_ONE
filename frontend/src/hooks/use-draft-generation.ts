@@ -9,7 +9,7 @@ import type {
   ImageQualityCheck,
 } from "../types";
 import { getRandomImagesPerDraft } from "../lib/image-count";
-import { generateAgentDrafts, uploadAssetFile } from "../lib/api";
+import { fetchDraftAssets, generateAgentDrafts, uploadAssetFile } from "../lib/api";
 import { withRetry } from "../lib/retry";
 
 export type DraftGenerationMode = "generate" | "rewrite";
@@ -57,6 +57,7 @@ export interface ImagesStep {
   index: number;
   title: string;
   status: "running" | "retrying" | "done" | "error";
+  draft_id?: number;
   retryCount?: number;
   assets?: AgentDraftItem["assets"];
   final_image_prompt?: string;
@@ -67,6 +68,48 @@ export interface ImagesStep {
 }
 
 export type WorkflowStep = TitlesStep | DraftStep | ImagesStep;
+
+const IMAGE_ASSET_RECOVERY_ATTEMPTS = 40;
+const IMAGE_ASSET_RECOVERY_DELAY_MS = 3000;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForDraftImageAssets(
+  draftId: number,
+  expectedCount: number,
+  shouldStop: () => boolean,
+): Promise<AgentDraftItem["assets"]> {
+  const minimumCount = Math.max(1, expectedCount);
+  let latestImageAssets: AgentDraftItem["assets"] = [];
+
+  for (let attempt = 0; attempt < IMAGE_ASSET_RECOVERY_ATTEMPTS; attempt++) {
+    if (shouldStop()) return [];
+
+    try {
+      const result = await fetchDraftAssets(draftId);
+      const imageAssets = result.items
+        .filter((asset) => asset.asset_type === "image")
+        .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+
+      if (imageAssets.length > 0) {
+        latestImageAssets = imageAssets as AgentDraftItem["assets"];
+      }
+      if (imageAssets.length >= minimumCount) {
+        return imageAssets as AgentDraftItem["assets"];
+      }
+    } catch {
+      // The original generation may still be finishing; keep polling briefly.
+    }
+
+    if (attempt < IMAGE_ASSET_RECOVERY_ATTEMPTS - 1) {
+      await delay(IMAGE_ASSET_RECOVERY_DELAY_MS);
+    }
+  }
+
+  return latestImageAssets;
+}
 
 const SYSTEM_PROMPT = `你是一个小红书内容策划与社群运营 Agent，擅长根据用户输入的文字需求和图片素材，生成适合小红书发布的完整笔记方案。
 
@@ -264,7 +307,7 @@ export function useDraftGeneration() {
       if (imagesPerDraft === 0) {
         setSteps((prev) => [
           ...prev,
-          { type: "images", index: i, title, status: "done", errors: ["已跳过（每篇图片数量设为 0，未生成图片）"] } as ImagesStep,
+          { type: "images", index: i, title, draft_id, status: "done", errors: ["已跳过（每篇图片数量设为 0，未生成图片）"] } as ImagesStep,
         ]);
         continue;
       }
@@ -273,7 +316,7 @@ export function useDraftGeneration() {
 
       setSteps((prev) => [
         ...prev,
-        { type: "images", index: i, title, status: "running" } as ImagesStep,
+        { type: "images", index: i, title, draft_id, status: "running" } as ImagesStep,
       ]);
 
       try {
@@ -290,15 +333,7 @@ export function useDraftGeneration() {
             metadata: { platform: "xhs" },
           }, 600000),
           {
-            onRetry: (attempt) => {
-              setSteps((prev) =>
-                prev.map((s, i2) =>
-                  i2 === imgStepIdx
-                    ? { type: "images", index: i, title, status: "retrying", retryCount: attempt }
-                    : s,
-                ),
-              );
-            },
+            maxRetries: 0,
           },
         )) as Record<string, unknown>;
 
@@ -306,6 +341,7 @@ export function useDraftGeneration() {
           type: "images",
           index: i,
           title,
+          draft_id,
           status: "done",
           assets: (res.assets as AgentDraftItem["assets"]) ?? [],
           iteration_history: (res.iteration_history as IterationRound[]) ?? [],
@@ -314,10 +350,26 @@ export function useDraftGeneration() {
         };
         setSteps((prev) => prev.map((s, i2) => (i2 === imgStepIdx ? imgStep : s)));
       } catch (e) {
+        const recoveredAssets = await waitForDraftImageAssets(draft_id, imagesPerDraft, () => abortRef.current);
+        if (recoveredAssets.length > 0) {
+          const imgStep: ImagesStep = {
+            type: "images",
+            index: i,
+            title,
+            draft_id,
+            status: "done",
+            assets: recoveredAssets,
+            errors: [],
+          };
+          setSteps((prev) => prev.map((s, i2) => (i2 === imgStepIdx ? imgStep : s)));
+          continue;
+        }
+
         const imgStep: ImagesStep = {
           type: "images",
           index: i,
           title,
+          draft_id,
           status: "error",
           error: String(e),
           assets: [],
